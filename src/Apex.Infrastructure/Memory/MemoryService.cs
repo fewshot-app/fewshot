@@ -1,47 +1,40 @@
-using System.Data;
 using Apex.Core.Interfaces;
 using Apex.Core.Models;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using Apex.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Apex.Infrastructure.Memory;
 
 /// <summary>
-/// SQL Server 2025 vector-native memory service.
-/// Uses VECTOR(768) column + VECTOR_DISTANCE() for cosine similarity search.
+/// SQLite-backed memory service. Embeddings stored as raw float bytes.
+/// Cosine similarity computed in-process — fine for personal-scale stores (thousands of memories).
 /// </summary>
 public class MemoryService : IMemoryService
 {
-    private readonly string _connectionString;
+    private readonly ApexDbContext _db;
     private readonly IEmbeddingService _embeddings;
     private readonly ILogger<MemoryService> _logger;
 
     private const int MinSummaryLength = 20;
     private const int MaxSummaryLength = 2000;
-    private const double DuplicateThreshold = 0.10; // VECTOR_DISTANCE cosine: lower = more similar
+    private const double DuplicateThreshold = 0.90; // cosine similarity: higher = more similar
 
-    public MemoryService(
-        IConfiguration config,
-        IEmbeddingService embeddings,
-        ILogger<MemoryService> logger)
+    public MemoryService(ApexDbContext db, IEmbeddingService embeddings, ILogger<MemoryService> logger)
     {
-        _connectionString = config.GetConnectionString("ApexDb")
-            ?? throw new InvalidOperationException("ApexDb connection string not configured");
+        _db = db;
         _embeddings = embeddings;
         _logger = logger;
     }
 
     public async Task<StoredMemory?> StoreAsync(MemoryStoreRequest request)
     {
-        // Quality gate
         if (!ValidateRequest(request, out var rejection))
         {
             _logger.LogInformation("Memory rejected: {Reason}", rejection);
             return null;
         }
 
-        // Duplicate check
         if (await IsDuplicateAsync(request.Summary))
         {
             _logger.LogInformation("Memory rejected: near-duplicate exists");
@@ -52,186 +45,106 @@ public class MemoryService : IMemoryService
         var pointId = Guid.NewGuid().ToString();
         var now = DateTime.UtcNow;
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-
-        // SQL Server 2025: cast JSON float array to VECTOR
-        const string sql = """
-            INSERT INTO Memories
-                (PointId, SessionId, Project, Summary, Solution, Approach, OutcomeLabel, Tags, Language, Embedding, CreatedAt)
-            VALUES
-                (@PointId, @SessionId, @Project, @Summary, @Solution, @Approach, @OutcomeLabel, @Tags, @Language,
-                 CAST(@Embedding AS VECTOR(768)), @CreatedAt)
-            """;
-
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@PointId", pointId);
-        cmd.Parameters.AddWithValue("@SessionId", request.SessionId);
-        cmd.Parameters.AddWithValue("@Project", (object?)request.Project ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@Summary", request.Summary);
-        cmd.Parameters.AddWithValue("@Solution", (object?)request.Solution ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@Approach", (object?)request.Approach ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@OutcomeLabel", (object?)request.OutcomeLabel ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@Tags", (object?)request.Tags ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@Language", (object?)request.Language ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@Embedding", ToJsonArray(embedding));
-        cmd.Parameters.AddWithValue("@CreatedAt", now);
-
-        await cmd.ExecuteNonQueryAsync();
-
-        _logger.LogInformation("Stored memory {PointId} for session {SessionId}: {Summary}",
-            pointId, request.SessionId, Truncate(request.Summary, 80));
-
-        return new StoredMemory
+        var memory = new MemoryEntry
         {
             PointId = pointId,
             SessionId = request.SessionId,
+            Project = request.Project,
             Summary = request.Summary,
             Solution = request.Solution,
             Approach = request.Approach,
             OutcomeLabel = request.OutcomeLabel,
             Tags = request.Tags,
             Language = request.Language,
-            Project = request.Project,
+            Embedding = ToBytes(embedding),
             CreatedAt = now
         };
+
+        _db.Memories.Add(memory);
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Stored memory {PointId} for session {SessionId}: {Summary}",
+            pointId, request.SessionId, Truncate(request.Summary, 80));
+
+        return ToStoredMemory(memory);
     }
 
     public async Task<List<SemanticMemory>> SearchAsync(string query, int sessionId, int limit = 5, double minScore = 0.55)
     {
         var queryVector = await _embeddings.EmbedAsync(query);
 
-        // VECTOR_DISTANCE('cosine', ...) returns 0=identical, 1=opposite
-        // Convert to similarity score: score = 1 - distance
-        // minScore 0.55 → max distance 0.45
-        var maxDistance = 1.0 - minScore;
+        // Pull all embeddings and score in-process
+        // For thousands of memories this is ~10-20ms — acceptable for local use
+        var all = await _db.Memories
+            .Select(m => new { m.PointId, m.SessionId, m.Summary, m.Solution, m.Approach,
+                               m.OutcomeLabel, m.Tags, m.Language, m.CreatedAt, m.Embedding })
+            .ToListAsync();
 
-        const string sql = """
-            SELECT TOP (@Limit)
-                PointId, SessionId, Project, Summary, Solution, Approach,
-                OutcomeLabel, Tags, Language, CreatedAt,
-                VECTOR_DISTANCE('cosine', Embedding, CAST(@QueryVector AS VECTOR(768))) AS Distance
-            FROM Memories
-            WHERE VECTOR_DISTANCE('cosine', Embedding, CAST(@QueryVector AS VECTOR(768))) <= @MaxDistance
-            ORDER BY Distance ASC
-            """;
-
-        var memories = new List<SemanticMemory>();
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Limit", limit);
-        cmd.Parameters.AddWithValue("@QueryVector", ToJsonArray(queryVector));
-        cmd.Parameters.AddWithValue("@MaxDistance", maxDistance);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            var distance = reader.GetDouble(reader.GetOrdinal("Distance"));
-            memories.Add(new SemanticMemory
+        var results = all
+            .Select(m => new { Memory = m, Score = CosineSimilarity(queryVector, ToFloats(m.Embedding)) })
+            .Where(x => x.Score >= minScore)
+            .OrderByDescending(x => x.Score)
+            .Take(limit)
+            .Select(x => new SemanticMemory
             {
-                Summary = reader.GetString("Summary"),
-                Solution = reader.IsDBNull("Solution") ? null : reader.GetString("Solution"),
-                Approach = reader.IsDBNull("Approach") ? null : reader.GetString("Approach"),
-                OutcomeLabel = reader.IsDBNull("OutcomeLabel") ? null : reader.GetString("OutcomeLabel"),
-                Tags = reader.IsDBNull("Tags") ? null : reader.GetString("Tags"),
-                RelevanceScore = 1.0 - distance,
-                SessionId = reader.GetInt32("SessionId"),
-                CreatedAt = reader.GetDateTime("CreatedAt")
-            });
-        }
+                Summary = x.Memory.Summary,
+                Solution = x.Memory.Solution,
+                Approach = x.Memory.Approach,
+                OutcomeLabel = x.Memory.OutcomeLabel,
+                Tags = x.Memory.Tags,
+                RelevanceScore = x.Score,
+                SessionId = x.Memory.SessionId,
+                CreatedAt = x.Memory.CreatedAt
+            })
+            .ToList();
 
-        _logger.LogInformation("Search for '{Query}' returned {Count} memories", Truncate(query, 60), memories.Count);
-        return memories;
+        _logger.LogInformation("Search for '{Query}' returned {Count} memories", Truncate(query, 60), results.Count);
+        return results;
     }
 
     public async Task<StoredMemory?> GetAsync(string pointId)
     {
-        const string sql = """
-            SELECT PointId, SessionId, Project, Summary, Solution, Approach,
-                   OutcomeLabel, Tags, Language, CreatedAt
-            FROM Memories WHERE PointId = @PointId
-            """;
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@PointId", pointId);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (!await reader.ReadAsync()) return null;
-
-        return MapStoredMemory(reader);
+        var m = await _db.Memories.FindAsync(pointId);
+        return m is null ? null : ToStoredMemory(m);
     }
 
     public async Task<bool> DeleteAsync(string pointId)
     {
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand("DELETE FROM Memories WHERE PointId = @PointId", conn);
-        cmd.Parameters.AddWithValue("@PointId", pointId);
-        var rows = await cmd.ExecuteNonQueryAsync();
+        var rows = await _db.Memories.Where(m => m.PointId == pointId).ExecuteDeleteAsync();
         return rows > 0;
     }
 
     public async Task<List<StoredMemory>> GetBySessionAsync(int sessionId)
     {
-        const string sql = """
-            SELECT PointId, SessionId, Project, Summary, Solution, Approach,
-                   OutcomeLabel, Tags, Language, CreatedAt
-            FROM Memories WHERE SessionId = @SessionId
-            ORDER BY CreatedAt DESC
-            """;
-
-        var memories = new List<StoredMemory>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@SessionId", sessionId);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            memories.Add(MapStoredMemory(reader));
-
-        return memories;
+        return await _db.Memories
+            .Where(m => m.SessionId == sessionId)
+            .OrderByDescending(m => m.CreatedAt)
+            .Select(m => ToStoredMemory(m))
+            .ToListAsync();
     }
 
     public async Task<bool> IsDuplicateAsync(string summary)
     {
         var vector = await _embeddings.EmbedAsync(summary);
+        var all = await _db.Memories.Select(m => m.Embedding).ToListAsync();
 
-        const string sql = """
-            SELECT TOP 1 VECTOR_DISTANCE('cosine', Embedding, CAST(@Vector AS VECTOR(768))) AS Distance
-            FROM Memories
-            WHERE VECTOR_DISTANCE('cosine', Embedding, CAST(@Vector AS VECTOR(768))) <= @Threshold
-            ORDER BY Distance ASC
-            """;
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Vector", ToJsonArray(vector));
-        cmd.Parameters.AddWithValue("@Threshold", DuplicateThreshold);
-
-        var result = await cmd.ExecuteScalarAsync();
-        return result is not null and not DBNull;
+        return all.Any(e => CosineSimilarity(vector, ToFloats(e)) >= DuplicateThreshold);
     }
 
     // ── Helpers ───────────────────────────────────────────────────
 
-    private static StoredMemory MapStoredMemory(SqlDataReader r) => new()
+    private static StoredMemory ToStoredMemory(MemoryEntry m) => new()
     {
-        PointId = r.GetString("PointId"),
-        SessionId = r.GetInt32("SessionId"),
-        Project = r.IsDBNull("Project") ? null : r.GetString("Project"),
-        Summary = r.GetString("Summary"),
-        Solution = r.IsDBNull("Solution") ? null : r.GetString("Solution"),
-        Approach = r.IsDBNull("Approach") ? null : r.GetString("Approach"),
-        OutcomeLabel = r.IsDBNull("OutcomeLabel") ? null : r.GetString("OutcomeLabel"),
-        Tags = r.IsDBNull("Tags") ? null : r.GetString("Tags"),
-        Language = r.IsDBNull("Language") ? null : r.GetString("Language"),
-        CreatedAt = r.GetDateTime("CreatedAt")
+        PointId = m.PointId,
+        SessionId = m.SessionId,
+        Project = m.Project,
+        Summary = m.Summary,
+        Solution = m.Solution,
+        Approach = m.Approach,
+        OutcomeLabel = m.OutcomeLabel,
+        Tags = m.Tags,
+        Language = m.Language,
+        CreatedAt = m.CreatedAt
     };
 
     private static bool ValidateRequest(MemoryStoreRequest r, out string reason)
@@ -253,11 +166,33 @@ public class MemoryService : IMemoryService
         return string.Join(" ", parts);
     }
 
-    /// <summary>
-    /// SQL Server 2025 VECTOR type is cast from a JSON float array string: '[0.1, 0.2, ...]'
-    /// </summary>
-    private static string ToJsonArray(float[] v) =>
-        "[" + string.Join(",", v.Select(f => f.ToString("G7", System.Globalization.CultureInfo.InvariantCulture))) + "]";
+    /// <summary>Cosine similarity in [0, 1]. Both vectors must be 768-dim.</summary>
+    private static double CosineSimilarity(float[] a, float[] b)
+    {
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        if (normA == 0 || normB == 0) return 0;
+        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB));
+    }
+
+    private static byte[] ToBytes(float[] floats)
+    {
+        var bytes = new byte[floats.Length * sizeof(float)];
+        Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    private static float[] ToFloats(byte[] bytes)
+    {
+        var floats = new float[bytes.Length / sizeof(float)];
+        Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
+        return floats;
+    }
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "...";
