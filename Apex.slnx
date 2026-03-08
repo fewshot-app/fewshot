@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Apex.Api/Apex.Api.csproj" />
+    <Project Path="src/Apex.Core/Apex.Core.csproj" />
+    <Project Path="src/Apex.Dashboard/Apex.Dashboard.csproj" />
+    <Project Path="src/Apex.Infrastructure/Apex.Infrastructure.csproj" />
+    <Project Path="src/Apex.Mcp/Apex.Mcp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Apex.Tests/Apex.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,46 @@
+<div class="card" style="@(IsBelowRecommended ? "border-left:3px solid var(--warning)" : "")">
+    <div class="flex justify-between items-center mb-1">
+        <div>
+            <strong class="text-sm">@Label</strong>
+            @if (!string.IsNullOrEmpty(Suffix))
+            {
+                <span class="text-muted text-sm"> (@Suffix)</span>
+            }
+        </div>
+        <span class="text-sm text-muted">Recommended: @Recommended@Suffix</span>
+    </div>
+    <p class="text-sm text-muted mb-1">@Description</p>
+    <div class="flex items-center gap-1">
+        <input type="number" class="search-input" style="width:120px"
+               value="@Value" @onchange="OnValueChanged" min="0" />
+        @if (IsBelowRecommended)
+        {
+            <span class="badge badge-warning">Below recommended</span>
+        }
+        else
+        {
+            <span class="badge badge-success">OK</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Description { get; set; } = "";
+    [Parameter] public int Value { get; set; }
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+    [Parameter] public int Recommended { get; set; }
+    [Parameter] public string Suffix { get; set; } = "";
+    [Parameter] public string InputType { get; set; } = "int";
+
+    private bool IsBelowRecommended => Value < Recommended;
+
+    private async Task OnValueChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+        {
+            Value = Math.Max(0, val);
+            await ValueChanged.InvokeAsync(Value);
+        }
+    }
+}

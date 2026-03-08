@@ -1,0 +1,1 @@
+{"sessionId":111,"role":"User","content":"I need to add caching to the Find a Doc API. The provider search is hitting the database on every request and it is slow under load."}

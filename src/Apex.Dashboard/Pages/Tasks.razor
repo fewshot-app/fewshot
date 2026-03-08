@@ -1,0 +1,232 @@
+@page "/tasks"
+@inject ApexApiClient Api
+@inject ApexSignalRService SignalR
+@implements IDisposable
+
+<div class="page-header">
+    <h1 class="page-title">Task Queue</h1>
+    <p class="page-subtitle">Autonomous tasks with approval workflow</p>
+    <span class="badge @(SignalR.IsConnected ? "badge-success" : "badge-warning")" style="font-size:0.7rem">
+        @(SignalR.IsConnected ? "● Live" : "○ Offline")
+    </span>
+</div>
+
+@if (_loading)
+{
+    <div class="loading">Loading...</div>
+}
+else
+{
+    <!-- Readiness -->
+    @if (_readiness != null)
+    {
+        <div class="card mb-2">
+            <div class="flex justify-between items-center">
+                <div class="card-title" style="margin:0">Agency Readiness</div>
+                <span class="badge @(_readiness.IsReady ? "badge-success" : "badge-warning")">
+                    @(_readiness.IsReady ? "READY" : "NOT READY")
+                </span>
+            </div>
+            @if (_readiness.BlockingReasons.Any())
+            {
+                <div class="mt-1">
+                    @foreach (var r in _readiness.BlockingReasons)
+                    {
+                        <div class="text-sm text-muted">• @r</div>
+                    }
+                </div>
+            }
+            @if (_readiness.Warnings?.Any() == true)
+            {
+                <div class="mt-1" style="padding:0.5rem 0.75rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:0.375rem">
+                    <div class="text-warning text-sm" style="font-weight:600;margin-bottom:0.25rem">⚠ Below Recommended Thresholds</div>
+                    @foreach (var w in _readiness.Warnings)
+                    {
+                        <div class="text-sm" style="color:var(--text-secondary)">• @w</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Pending Approval -->
+    @if (_pendingApproval.Any())
+    {
+        <div class="card" style="border-left:3px solid var(--warning)">
+            <div class="card-title">Awaiting Approval (@_pendingApproval.Count)</div>
+            @foreach (var t in _pendingApproval)
+            {
+                <div class="flex justify-between items-center mb-1" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+                    <div>
+                        <strong>@t.TaskType</strong>
+                        <span class="text-sm text-muted"> — Session @t.SessionId</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <button class="btn btn-sm btn-primary" @onclick="() => ApproveAsync(t.TaskId)">Approve</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => RejectAsync(t.TaskId)">Reject</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- All Tasks -->
+    <div class="card">
+        <div class="card-title">All Tasks</div>
+        @if (!_allTasks.Any())
+        {
+            <p class="text-muted">No tasks yet.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Result</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _allTasks.OrderByDescending(t => t.CreatedAt))
+                    {
+                        <tr class="@(_highlightedTaskId == t.TaskId ? "row-highlight" : "")">
+                            <td>@t.TaskId</td>
+                            <td>@t.TaskType</td>
+                            <td>
+                                <span class="badge @StatusBadge(t.Status)">@t.Status</span>
+                                @if (t.AttemptCount > 1)
+                                {
+                                    <span class="text-sm text-muted">×@t.AttemptCount</span>
+                                }
+                            </td>
+                            <td class="text-sm">
+                                @if (!string.IsNullOrEmpty(t.Result))
+                                {
+                                    @t.Result
+                                }
+                                else if (!string.IsNullOrEmpty(t.LastError))
+                                {
+                                    <span class="text-danger">@t.LastError</span>
+                                }
+                            </td>
+                            <td class="text-sm text-muted">@t.CreatedAt.ToString("MMM dd HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+<style>
+    .row-highlight {
+        animation: highlight-fade 2s ease-out;
+    }
+    @@keyframes highlight-fade {
+        0% { background-color: rgba(99, 102, 241, 0.25); }
+        100% { background-color: transparent; }
+    }
+</style>
+
+@code {
+    private AgencyReadinessDto? _readiness;
+    private List<TaskDto> _pendingApproval = [];
+    private List<TaskDto> _allTasks = [];
+    private bool _loading = true;
+    private int? _highlightedTaskId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _loading = false;
+        SignalR.OnTaskUpdate += HandleTaskUpdate;
+        SignalR.OnStateChanged += HandleStateChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _readiness = await Api.GetReadinessAsync();
+            _pendingApproval = await Api.GetPendingApprovalAsync();
+
+            // Pull tasks from all known sessions dynamically
+            var sessions = await Api.GetSessionsAsync();
+            _allTasks = [];
+            foreach (var s in sessions)
+            {
+                try { _allTasks.AddRange(await Api.GetTasksBySessionAsync(s.SessionId)); }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Tasks] Error: {ex.Message}");
+        }
+    }
+
+    private void HandleTaskUpdate(int sessionId, string status, string detail)
+    {
+        InvokeAsync(async () =>
+        {
+            // Refresh pending approval and update matching task in list
+            _pendingApproval = await Api.GetPendingApprovalAsync();
+
+            var freshTasks = await Api.GetTasksBySessionAsync(sessionId);
+            foreach (var t in freshTasks)
+            {
+                var idx = _allTasks.FindIndex(x => x.TaskId == t.TaskId);
+                if (idx >= 0)
+                {
+                    _highlightedTaskId = t.TaskId;
+                    _allTasks[idx] = t;
+                }
+                else
+                {
+                    _allTasks.Insert(0, t);
+                    _highlightedTaskId = t.TaskId;
+                }
+            }
+
+            StateHasChanged();
+
+            await Task.Delay(2100);
+            _highlightedTaskId = null;
+            StateHasChanged();
+        });
+    }
+
+    private void HandleStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ApproveAsync(int taskId)
+    {
+        await Api.ApproveTaskAsync(taskId);
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task RejectAsync(int taskId)
+    {
+        await Api.RejectTaskAsync(taskId, "Rejected from dashboard");
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private static string StatusBadge(string status) => status switch
+    {
+        "Completed" => "badge-success",
+        "Failed" => "badge-danger",
+        "AwaitingApproval" => "badge-warning",
+        "Executing" or "Analyzing" or "Verifying" => "badge-info",
+        _ => "badge-muted"
+    };
+
+    public void Dispose()
+    {
+        SignalR.OnTaskUpdate -= HandleTaskUpdate;
+        SignalR.OnStateChanged -= HandleStateChanged;
+    }
+}

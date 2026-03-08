@@ -1,0 +1,61 @@
+# ── .NET ─────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userprefs
+*.pidb
+*.sln.docstates
+TestResults/
+[Pp]ublish/
+
+# ── ASP.NET ───────────────────────────────────────────────────────
+wwwroot/dist/
+
+# ── NuGet ────────────────────────────────────────────────────────
+*.nupkg
+*.snupkg
+packages/
+!**/packages/repositories.config
+# nuget.config — keep tracked (scoped to nuget.org, no private feeds)
+
+# ── Rider / Jetbrains ────────────────────────────────────────────
+.idea/
+*.sln.iml
+
+# ── VS Code ──────────────────────────────────────────────────────
+.vscode/
+
+# ── Docker secrets / environment ─────────────────────────────────
+docker/.env
+docker/.env.local
+docker/.env.*.local
+!docker/.env.example
+
+# ── SQLite (local data — never commit) ───────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Ollama model cache ────────────────────────────────────────────
+.ollama/
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── User secrets ─────────────────────────────────────────────────
+**/secrets.json
+**/appsettings.local.json
+**/appsettings.Development.json
+  
+# Serena MCP local memory  
+.serena/ 
