@@ -24,6 +24,7 @@ public class ApexDbContext : DbContext
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<MemoryEntry> Memories => Set<MemoryEntry>();
+    public DbSet<ProxyAuditLog> ProxyAuditLogs => Set<ProxyAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -184,6 +185,19 @@ public class ApexDbContext : DbContext
             e.Property(x => x.Summary).IsRequired();
             e.Property(x => x.CreatedAt).HasDefaultValueSql("datetime('now')");
             e.HasIndex(x => x.SessionId);
+        });
+
+        // ProxyAuditLog — events from Apex.Proxy stdio interceptor
+        m.Entity<ProxyAuditLog>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Direction).HasMaxLength(20);
+            e.Property(x => x.Method).HasMaxLength(100);
+            e.Property(x => x.FindingTypes).HasMaxLength(200);
+            e.Property(x => x.Source).HasMaxLength(50);
+            e.Property(x => x.Timestamp).HasDefaultValueSql("datetime('now')");
+            e.HasIndex(x => x.Timestamp);
+            e.HasIndex(x => x.WasRedacted);
         });
     }
 }
