@@ -115,6 +115,36 @@ public class ApexApiClient
     public async Task DeleteProjectAsync(int id) =>
         await _http.DeleteAsync($"/api/projects/{id}");
 
+    // Packs
+    public async Task<PackExportDto?> ExportPackAsync(string project) =>
+        await _http.GetFromJsonAsync<PackExportDto>($"/api/packs/export/{project}");
+
+    public async Task<PackImportResultDto?> ImportPackAsync(string packJson, string? decryptionKey = null, string? targetProject = null)
+    {
+        var resp = await _http.PostAsJsonAsync("/api/packs/import", new { packJson, decryptionKey, targetProject });
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<PackImportResultDto>();
+    }
+
+    public async Task<PackValidationResultDto?> ValidatePackAsync(string packJson)
+    {
+        var resp = await _http.PostAsJsonAsync("/api/packs/validate", new { packJson });
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<PackValidationResultDto>();
+    }
+
+    public async Task<string?> GetMachineIdAsync()
+    {
+        var result = await _http.GetFromJsonAsync<MachineIdDto>("/api/packs/machine-id");
+        return result?.MachineId;
+    }
+
+    public async Task<string?> GenerateKeyAsync()
+    {
+        var result = await _http.GetFromJsonAsync<KeygenDto>("/api/packs/keygen");
+        return result?.Key;
+    }
+
     // Audit
     public async Task<AuditResultDto?> AnalyzeAsync(string content)
     {
@@ -224,3 +254,48 @@ public record ProjectDto(
     string Keywords, string? Facts, bool IsActive, DateTime CreatedAt);
 
 public record ProjectUpsertDto(string Name, string DisplayName, string Keywords, string? Facts, bool IsActive = true);
+
+// Pack DTOs
+public class PackExportDto
+{
+    public string PackId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Version { get; set; } = "";
+    public string Author { get; set; } = "";
+    public string TargetProject { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public List<PackMemoryDto> Memories { get; set; } = [];
+    public List<PackPreferenceDto> Preferences { get; set; } = [];
+    public List<PackAntiPatternDto> AntiPatterns { get; set; } = [];
+}
+
+public record PackMemoryDto(string Summary, string? Solution, string? Approach, string? OutcomeLabel, string? Tags, string? Language);
+public record PackPreferenceDto(string Category, string Key, string Value, double ConfidenceScore);
+public record PackAntiPatternDto(string Pattern, string Reason, string? Language, string? ErrorCode);
+
+public class PackImportResultDto
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public string PackId { get; set; } = "";
+    public string PackName { get; set; } = "";
+    public int MemoriesImported { get; set; }
+    public int PreferencesImported { get; set; }
+    public int AntiPatternsImported { get; set; }
+    public int DuplicatesSkipped { get; set; }
+}
+
+public class PackValidationResultDto
+{
+    public bool IsValid { get; set; }
+    public string? Error { get; set; }
+    public string PackId { get; set; } = "";
+    public string PackName { get; set; } = "";
+    public int MemoryCount { get; set; }
+    public int PreferenceCount { get; set; }
+    public int AntiPatternCount { get; set; }
+}
+
+public record MachineIdDto(string MachineId);
+public record KeygenDto(string Key);

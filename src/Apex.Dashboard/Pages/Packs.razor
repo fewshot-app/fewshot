@@ -1,0 +1,199 @@
+@page "/packs"
+@using Apex.Dashboard.Services
+@inject ApexApiClient Api
+
+<h2>Packs</h2>
+<p>Export project knowledge or import packs to bootstrap APEX with curated data.</p>
+
+@if (_error != null)
+{
+    <div style="background:#fdd;padding:10px;border-radius:4px;margin-bottom:16px">@_error</div>
+}
+
+@if (_success != null)
+{
+    <div style="background:#dfd;padding:10px;border-radius:4px;margin-bottom:16px">@_success</div>
+}
+
+<div style="display:flex;gap:32px;flex-wrap:wrap">
+
+    <!-- Export Panel -->
+    <div style="flex:1;min-width:350px;border:1px solid #ddd;border-radius:8px;padding:16px">
+        <h3>Export</h3>
+        <p>Export a project's memories, preferences, and anti-patterns as a pack.</p>
+
+        <label><strong>Project</strong></label><br/>
+        <select @bind="_exportProject" style="width:100%;padding:6px;margin:4px 0 12px">
+            <option value="">— Select project —</option>
+            @foreach (var p in _projects)
+            {
+                <option value="@p.Name">@p.DisplayName (@p.Name)</option>
+            }
+        </select>
+
+        <button @onclick="ExportAsync" disabled="@(string.IsNullOrEmpty(_exportProject) || _loading)"
+                style="padding:8px 20px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer">
+            @(_loading ? "Exporting..." : "Export Pack")
+        </button>
+
+        @if (_exportedJson != null)
+        {
+            <div style="margin-top:12px">
+                <label><strong>Pack JSON</strong> <small>(copy or download)</small></label><br/>
+                <textarea readonly style="width:100%;height:200px;font-family:monospace;font-size:12px;padding:8px;margin-top:4px">@_exportedJson</textarea>
+                <br/>
+                <button @onclick="CopyExportToClipboard" style="margin-top:4px;padding:4px 12px">Copy</button>
+            </div>
+        }
+    </div>
+
+    <!-- Import Panel -->
+    <div style="flex:1;min-width:350px;border:1px solid #ddd;border-radius:8px;padding:16px">
+        <h3>Import</h3>
+        <p>Paste pack JSON to import memories, preferences, and anti-patterns.</p>
+
+        <label><strong>Pack JSON</strong></label><br/>
+        <textarea @bind="_importJson" placeholder="Paste pack JSON here..."
+                  style="width:100%;height:120px;font-family:monospace;font-size:12px;padding:8px;margin:4px 0"></textarea>
+
+        <label><strong>Decryption Key</strong> <small>(optional, for encrypted packs)</small></label><br/>
+        <input @bind="_decryptionKey" type="text" placeholder="Base64 key..."
+               style="width:100%;padding:6px;margin:4px 0 8px;font-family:monospace" />
+
+        <label><strong>Target Project Override</strong> <small>(optional)</small></label><br/>
+        <select @bind="_importTargetProject" style="width:100%;padding:6px;margin:4px 0 12px">
+            <option value="">— Use pack default —</option>
+            @foreach (var p in _projects)
+            {
+                <option value="@p.Name">@p.DisplayName (@p.Name)</option>
+            }
+        </select>
+
+        <div style="display:flex;gap:8px">
+            <button @onclick="ValidateAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)"
+                    style="padding:8px 16px;background:#6b7280;color:white;border:none;border-radius:4px;cursor:pointer">
+                Validate
+            </button>
+            <button @onclick="ImportAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)"
+                    style="padding:8px 20px;background:#059669;color:white;border:none;border-radius:4px;cursor:pointer">
+                @(_loading ? "Importing..." : "Import Pack")
+            </button>
+        </div>
+
+        @if (_validationResult != null)
+        {
+            <div style="margin-top:12px;padding:10px;background:@(_validationResult.IsValid ? "#dfd" : "#fdd");border-radius:4px">
+                @if (_validationResult.IsValid)
+                {
+                    <p style="margin:0"><strong>Valid:</strong> @_validationResult.PackName (@_validationResult.PackId)</p>
+                    <p style="margin:2px 0 0;font-size:0.85em">@_validationResult.MemoryCount memories, @_validationResult.PreferenceCount preferences, @_validationResult.AntiPatternCount anti-patterns</p>
+                }
+                else
+                {
+                    <p style="margin:0"><strong>Invalid:</strong> @_validationResult.Error</p>
+                }
+            </div>
+        }
+
+        @if (_importResult != null)
+        {
+            <div style="margin-top:12px;padding:10px;background:@(_importResult.Success ? "#dfd" : "#fdd");border-radius:4px">
+                @if (_importResult.Success)
+                {
+                    <p style="margin:0"><strong>Imported:</strong> @_importResult.PackName</p>
+                    <p style="margin:2px 0 0;font-size:0.85em">@_importResult.MemoriesImported memories, @_importResult.PreferencesImported preferences, @_importResult.AntiPatternsImported anti-patterns, @_importResult.DuplicatesSkipped skipped</p>
+                }
+                else
+                {
+                    <p style="margin:0"><strong>Failed:</strong> @_importResult.Error</p>
+                }
+            </div>
+        }
+    </div>
+
+</div>
+
+<!-- Machine Info -->
+<div style="margin-top:24px;border:1px solid #ddd;border-radius:8px;padding:16px">
+    <h3>Machine Info</h3>
+    <p><strong>Machine ID:</strong> <code>@(_machineId ?? "loading...")</code></p>
+</div>
+
+@code {
+    private List<ProjectDto> _projects = [];
+    private string? _error;
+    private string? _success;
+    private bool _loading;
+
+    // Export
+    private string _exportProject = "";
+    private string? _exportedJson;
+
+    // Import
+    private string _importJson = "";
+    private string _decryptionKey = "";
+    private string _importTargetProject = "";
+    private PackValidationResultDto? _validationResult;
+    private PackImportResultDto? _importResult;
+
+    // Info
+    private string? _machineId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _projects = await Api.GetProjectsAsync();
+            _machineId = await Api.GetMachineIdAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task ExportAsync()
+    {
+        _loading = true; _error = null; _success = null; _exportedJson = null;
+        try
+        {
+            var pack = await Api.ExportPackAsync(_exportProject);
+            if (pack != null)
+            {
+                _exportedJson = System.Text.Json.JsonSerializer.Serialize(pack,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+                _success = $"Exported '{pack.Name}': {pack.Memories.Count} memories, {pack.Preferences.Count} preferences, {pack.AntiPatterns.Count} anti-patterns";
+            }
+            else { _error = "Export returned no data."; }
+        }
+        catch (Exception ex) { _error = $"Export failed: {ex.Message}"; }
+        _loading = false;
+    }
+
+    private async Task ValidateAsync()
+    {
+        _loading = true; _error = null; _validationResult = null;
+        try { _validationResult = await Api.ValidatePackAsync(_importJson); }
+        catch (Exception ex) { _error = $"Validation failed: {ex.Message}"; }
+        _loading = false;
+    }
+
+    private async Task ImportAsync()
+    {
+        _loading = true; _error = null; _success = null; _importResult = null;
+        try
+        {
+            var key = string.IsNullOrWhiteSpace(_decryptionKey) ? null : _decryptionKey;
+            var target = string.IsNullOrWhiteSpace(_importTargetProject) ? null : _importTargetProject;
+            _importResult = await Api.ImportPackAsync(_importJson, key, target);
+            if (_importResult?.Success == true)
+                _success = $"Import complete: {_importResult.PackName}";
+        }
+        catch (Exception ex) { _error = $"Import failed: {ex.Message}"; }
+        _loading = false;
+    }
+
+    private void CopyExportToClipboard()
+    {
+        // Blazor WASM can't directly access clipboard without JS interop
+        // The textarea is selectable, user can Ctrl+A, Ctrl+C
+        _success = "Select the text in the box and copy with Ctrl+C";
+    }
+}

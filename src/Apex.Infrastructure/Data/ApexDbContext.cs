@@ -25,6 +25,7 @@ public class ApexDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<MemoryEntry> Memories => Set<MemoryEntry>();
     public DbSet<ProxyAuditLog> ProxyAuditLogs => Set<ProxyAuditLog>();
+    public DbSet<LicenseActivationCache> LicenseActivations => Set<LicenseActivationCache>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -198,6 +199,18 @@ public class ApexDbContext : DbContext
             e.Property(x => x.Timestamp).HasDefaultValueSql("datetime('now')");
             e.HasIndex(x => x.Timestamp);
             e.HasIndex(x => x.WasRedacted);
+        });
+
+        // LicenseActivationCache — cached license activations
+        m.Entity<LicenseActivationCache>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.LicenseKey).HasMaxLength(100).IsRequired();
+            e.Property(x => x.PackId).HasMaxLength(100);
+            e.Property(x => x.MachineId).HasMaxLength(50);
+            e.Property(x => x.DecryptionKey).HasMaxLength(100);
+            e.Property(x => x.ActivatedAt).HasDefaultValueSql("datetime('now')");
+            e.HasIndex(x => x.LicenseKey).IsUnique();
         });
     }
 }

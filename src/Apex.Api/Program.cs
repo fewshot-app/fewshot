@@ -6,6 +6,7 @@ using Apex.Infrastructure.Context;
 using Apex.Infrastructure.Data;
 using Apex.Infrastructure.Experiments;
 using Apex.Infrastructure.Memory;
+using Apex.Infrastructure.Packs;
 using Apex.Infrastructure.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +66,10 @@ builder.Services.AddHttpClient("Ollama", client =>
 // ── Memory + Embeddings + LLM ─────────────────────────────────────
 builder.Services.AddTransient<IEmbeddingService, EmbeddingService>();
 builder.Services.AddTransient<IMemoryService, MemoryService>();
+
+// ── Packs ────────────────────────────────────────────────────────────────────
+builder.Services.AddTransient<PackImportService>();
+builder.Services.AddTransient<PackExportService>();
 builder.Services.AddTransient<ILlmService, LlmService>();
 
 // ── Hangfire (in-memory — jobs survive restarts via SQLite sessions) ──
