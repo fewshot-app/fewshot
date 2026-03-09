@@ -135,7 +135,8 @@ public class AuditClient
     ];
 
     private static readonly HashSet<string> BlockingTypes =
-        ["SSN", "PrivateKey", "ConnectionString", "BearerToken", "JwtToken", "CreditCard"];
+        ["SSN", "PrivateKey", "ConnectionString", "BearerToken", "JwtToken", "CreditCard",
+         "CommandInjection", "SystemPromptOverride", "HiddenInstruction"];
 
     private const double EntropyThreshold = 4.5;
     private const int MinTokenLength = 20;
@@ -173,16 +174,110 @@ public class AuditClient
     {
         var findings = new List<ProxyFinding>();
 
+        // Stage 1: PII/Secret regex patterns
         foreach (var (name, pattern) in Patterns)
             if (pattern.IsMatch(text))
                 findings.Add(new(name, "Regex", 1.0));
 
+        // Stage 2: Shannon entropy for unknown secrets
         foreach (Match m in TokenPattern.Matches(text))
         {
             var e = Entropy(m.Value);
             if (e > EntropyThreshold)
                 findings.Add(new("HighEntropySecret", "Entropy", Math.Min(e / 6.0, 1.0)));
         }
+
+        // Stage 3: Prompt injection detection
+        findings.AddRange(DetectPromptInjection(text));
+
+        // Stage 4: Command injection detection
+        findings.AddRange(DetectCommandInjection(text));
+
+        return findings;
+    }
+
+    // ── Stage 3: Prompt Injection Detection (ported from CrunchTime MCP) ──────
+    private static readonly (string Name, Regex Pattern, double BaseConfidence)[] PromptInjectionPatterns =
+    [
+        // Role manipulation
+        ("SystemPromptOverride", new Regex(@"ignore\s+(all\s+)?((previous|prior|above)\s+)?(instructions|commands)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.85),
+        ("SystemPromptOverride", new Regex(@"disregard\s+(all\s+)?((previous|prior)\s+)?(instructions|commands|rules)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.85),
+        ("SystemPromptOverride", new Regex(@"forget\s+(everything|all)\s+(before|above)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.80),
+        // Direct override
+        ("SystemPromptOverride", new Regex(@"system\s*:\s*you\s+are\s+(now|a)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.95),
+        ("SystemPromptOverride", new Regex(@"you\s+are\s+(now\s+)?a\s+[\w\s]+\s+(without|with\s+no)\s+(restrictions|limits)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.95),
+        ("SystemPromptOverride", new Regex(@"override\s+(safety|security|ethical)\s+(protocols|guidelines|restrictions)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.95),
+        ("SystemPromptOverride", new Regex(@"ignore\s+your\s+(programming|training|guidelines)", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.90),
+        // Jailbreak
+        ("JailbreakAttempt", new Regex(@"pretend\s+you\s+are", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.70),
+        ("JailbreakAttempt", new Regex(@"act\s+as\s+(if|though)\s+you", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.65),
+        ("JailbreakAttempt", new Regex(@"simulate\s+being", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.65),
+        ("JailbreakAttempt", new Regex(@"roleplay\s+as", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.60),
+        // Hidden instruction markers
+        ("HiddenInstruction", new Regex(@"\[INST\]", RegexOptions.Compiled), 0.90),
+        ("HiddenInstruction", new Regex(@"<\|im_start\|>", RegexOptions.Compiled), 0.90),
+        ("HiddenInstruction", new Regex(@"###\s*Instruction", RegexOptions.IgnoreCase | RegexOptions.Compiled), 0.80),
+    ];
+
+    private static List<ProxyFinding> DetectPromptInjection(string text)
+    {
+        var findings = new List<ProxyFinding>();
+        foreach (var (name, pattern, confidence) in PromptInjectionPatterns)
+        {
+            var matches = pattern.Matches(text);
+            if (matches.Count > 0)
+            {
+                // Multiple matches boost confidence
+                var boosted = Math.Min(confidence + (matches.Count - 1) * 0.05, 1.0);
+                findings.Add(new(name, "PromptInjection", boosted));
+            }
+        }
+        return findings;
+    }
+
+    // ── Stage 4: Command Injection Detection (ported from CrunchTime MCP) ─────
+    private static readonly string[] DangerousCommands =
+    [
+        "rm -rf", "del /f", "format c:", "mkfs",
+        "dd if=", ":(){ :|:& };:",  // Fork bomb
+        "chmod 777", "chown root",
+        "sudo ", "su -",
+        "eval(", "exec(",
+        "net user", "net localgroup",
+        "reg delete", "reg add",
+    ];
+
+    private static readonly Regex PathTraversalPattern = new(@"\.\.[/\\]", RegexOptions.Compiled);
+
+    private static readonly string[] UrlEncodedShellChars =
+    [
+        "%3B", "%7C", "%26", "%24", "%60", // ; | & $ `
+        "%0A", "%0D",                       // newlines
+        "%3C", "%3E",                       // < >
+    ];
+
+    private static List<ProxyFinding> DetectCommandInjection(string text)
+    {
+        var findings = new List<ProxyFinding>();
+
+        // Dangerous commands (auto-block)
+        foreach (var cmd in DangerousCommands)
+        {
+            if (text.Contains(cmd, StringComparison.OrdinalIgnoreCase))
+                findings.Add(new("CommandInjection", "CommandInjection", 0.95));
+        }
+
+        // Path traversal
+        var traversals = PathTraversalPattern.Matches(text);
+        if (traversals.Count > 0)
+        {
+            var confidence = traversals.Count > 3 ? 0.90 : 0.70;
+            findings.Add(new("PathTraversal", "CommandInjection", confidence));
+        }
+
+        // URL-encoded shell characters (bypass attempts)
+        if (UrlEncodedShellChars.Any(enc => text.Contains(enc, StringComparison.OrdinalIgnoreCase)))
+            findings.Add(new("EncodingBypass", "CommandInjection", 0.80));
 
         return findings;
     }
