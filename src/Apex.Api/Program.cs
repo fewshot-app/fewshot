@@ -11,6 +11,25 @@ using Apex.Infrastructure.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 
+// ── Pin working directory so Windows Service resolves paths correctly ──
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
+// ── Startup logging to file (captures service startup failures) ──
+var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDir);
+var startupLogPath = Path.Combine(logDir, "startup.log");
+
+void Log(string message) =>
+    File.AppendAllText(startupLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
+
+try
+{
+Log("APEX starting...");
+Log($"  BaseDirectory: {AppContext.BaseDirectory}");
+Log($"  CurrentDirectory: {Directory.GetCurrentDirectory()}");
+Log($"  User: {Environment.UserName}");
+Log($"  Is service: {!Environment.UserInteractive}");
+
 var builder = WebApplication.CreateBuilder(args);
 
 // ── SQLite connection string (expands %APPDATA%) ─────────────────
@@ -183,4 +202,12 @@ app.MapGet("/health", async (IHttpClientFactory httpFactory, IConfiguration conf
     });
 });
 
+Log("Host built and configured. Calling app.Run()...");
 app.Run();
+Log("APEX stopped.");
+}
+catch (Exception ex)
+{
+    Log($"FATAL: {ex}");
+    throw;
+}
