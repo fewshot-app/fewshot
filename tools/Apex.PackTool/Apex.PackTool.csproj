@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>apex-pack</AssemblyName>
+    <RootNamespace>Apex.PackTool</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Apex.Core\Apex.Core.csproj" />
+    <ProjectReference Include="..\..\src\Apex.Infrastructure\Apex.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>
