@@ -245,7 +245,7 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 1. ~~**`apex_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
 2. ~~**Pack system (7c)**~~ ✅ DONE — models, PackCrypto (AES-256-CBC), import/export services, PacksController, dashboard Packs page, Apex.PackTool CLI
 3. ~~**Pack export endpoint**~~ ✅ DONE — `GET /api/packs/export/{project}` + `POST /api/packs/import` + validate/keygen/machine-id
-4. **APEX.Licensing deploy** — create repo, docker compose up, seed packs, wire Lemon Squeezy
+4. ~~**APEX.Licensing deploy**~~ ✅ DONE — separate repo at `C:\Users\Joe\source\repos\APEX.Licensing`, .NET 8 minimal API + SQLite + Dapper + Docker Compose
 5. ~~**Proxy Audit dashboard page**~~ ✅ DONE — stats cards, logs table with pagination/filtering, nav link
 6. **GitHub Release** — `git tag v1.0.0 && git push origin v1.0.0` to trigger release workflow
 7. **Pack content** — build real wordpress-divi pack from actual WVU Medicine memories
