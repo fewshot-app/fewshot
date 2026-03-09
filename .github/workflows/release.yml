@@ -41,21 +41,28 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish/mcp
 
-      - name: Publish Apex.Dashboard
+      - name: Publish Apex.Proxy
         run: |
-          dotnet publish src/Apex.Dashboard/Apex.Dashboard.csproj `
+          dotnet publish src/Apex.Proxy/Apex.Proxy.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish/proxy
+
+      - name: Publish Apex.Dashboard
+        run: |
+          dotnet publish src/Apex.Dashboard/Apex.Dashboard.csproj `
+            -c Release `
             -o publish/dashboard
 
       - name: Zip artifacts
         run: |
-          Compress-Archive -Path publish/api/*     -DestinationPath publish/Apex.Api-win-x64.zip
-          Compress-Archive -Path publish/mcp/*     -DestinationPath publish/Apex.Mcp-win-x64.zip
-          Compress-Archive -Path publish/dashboard/* -DestinationPath publish/Apex.Dashboard-win-x64.zip
+          Compress-Archive -Path publish/api/*       -DestinationPath publish/Apex.Api-win-x64.zip
+          Compress-Archive -Path publish/mcp/*       -DestinationPath publish/Apex.Mcp-win-x64.zip
+          Compress-Archive -Path publish/proxy/*     -DestinationPath publish/Apex.Proxy-win-x64.zip
+          Compress-Archive -Path publish/dashboard/* -DestinationPath publish/Apex.Dashboard.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -74,13 +81,15 @@ jobs:
             ## What's included
             - `Apex.Api-win-x64.zip` — API server (self-contained, no .NET install needed)
             - `Apex.Mcp-win-x64.zip` — MCP stdio server for Claude Desktop
-            - `Apex.Dashboard-win-x64.zip` — Blazor dashboard
+            - `Apex.Proxy-win-x64.zip` — MCP audit proxy
+            - `Apex.Dashboard.zip` — Blazor WASM dashboard (static files)
 
             ## Manual install
             See [README](https://github.com/jstarkwv/APEX/blob/feature/no-docker/README.md) for manual setup instructions.
           files: |
             publish/Apex.Api-win-x64.zip
             publish/Apex.Mcp-win-x64.zip
-            publish/Apex.Dashboard-win-x64.zip
+            publish/Apex.Proxy-win-x64.zip
+            publish/Apex.Dashboard.zip
           draft: false
           prerelease: false
