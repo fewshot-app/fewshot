@@ -71,16 +71,16 @@ function Invoke-OllamaPull {
 
 # ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor DarkCyan
-Write-Host "  ║   APEX — Adaptive Personalized EXperience  ║" -ForegroundColor DarkCyan
-Write-Host "  ║           Installer v1.3                    ║" -ForegroundColor DarkCyan
-Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor DarkCyan
+Write-Host "  +==========================================+" -ForegroundColor DarkCyan
+Write-Host "  |   APEX -- Adaptive Personalized EXperience |" -ForegroundColor DarkCyan
+Write-Host "  |           Installer v1.4                    |" -ForegroundColor DarkCyan
+Write-Host "  +==========================================+" -ForegroundColor DarkCyan
 Write-Host ""
 
 # ── Admin check ────────────────────────────────────────────────────────────────
 Write-Step "Checking privileges"
 if (-not (Test-Admin)) {
-    Write-Warn "Not running as Administrator — will skip Windows Service registration."
+    Write-Warn "Not running as Administrator -- will skip Windows Service registration."
     Write-Warn "Re-run as Administrator to install the service (recommended)."
     $script:SkipService = $true
 } else {
@@ -109,17 +109,15 @@ $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollamaExe) {
     Write-Host "      Ollama not found. Installing..." -ForegroundColor Yellow
 
-    # Try winget first (silent, reliable)
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         Write-Host "      Installing via winget (silent)..." -ForegroundColor Gray
         winget install --id Ollama.Ollama --accept-package-agreements --accept-source-agreements --silent
     } else {
-        # Fallback: download and run the exe installer
         Write-Host "      winget not available. Downloading OllamaSetup.exe..." -ForegroundColor Gray
         $ollamaInstaller = "$env:TEMP\OllamaSetup.exe"
         Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile $ollamaInstaller -UseBasicParsing
-        Write-Host "      Running installer — please complete the setup wizard if it appears..." -ForegroundColor Yellow
+        Write-Host "      Running installer -- please complete the setup wizard if it appears..." -ForegroundColor Yellow
         $proc = Start-Process -FilePath $ollamaInstaller -Wait -PassThru
         Remove-Item $ollamaInstaller -Force -ErrorAction SilentlyContinue
         if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne $null) {
@@ -127,12 +125,10 @@ if (-not $ollamaExe) {
         }
     }
 
-    # Refresh PATH so we can find ollama.exe
     $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
     $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
     $env:PATH    = "$machinePath;$userPath"
 
-    # Also check the known install location directly
     $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
     if (-not $ollamaExe) {
         $defaultPath = "$env:LOCALAPPDATA\Programs\Ollama"
@@ -151,7 +147,6 @@ if (-not $ollamaExe) {
     Write-Ok "Ollama found at $($ollamaExe.Source)"
 }
 
-# Start Ollama if not running
 if (-not (Get-OllamaRunning)) {
     Write-Host "      Starting Ollama..." -ForegroundColor Gray
     Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden
@@ -175,14 +170,14 @@ Write-Host "      Pulling $OllamaEmbed..." -ForegroundColor Gray
 if (Invoke-OllamaPull $OllamaEmbed) {
     Write-Ok "$OllamaEmbed ready"
 } else {
-    Write-Warn "Failed to pull $OllamaEmbed — you can pull it manually later: ollama pull $OllamaEmbed"
+    Write-Warn "Failed to pull $OllamaEmbed -- you can pull it manually later: ollama pull $OllamaEmbed"
 }
 
 Write-Host "      Pulling $OllamaChat..." -ForegroundColor Gray
 if (Invoke-OllamaPull $OllamaChat) {
     Write-Ok "$OllamaChat ready"
 } else {
-    Write-Warn "Failed to pull $OllamaChat — you can pull it manually later: ollama pull $OllamaChat"
+    Write-Warn "Failed to pull $OllamaChat -- you can pull it manually later: ollama pull $OllamaChat"
 }
 
 # ── Download release ───────────────────────────────────────────────────────────
@@ -237,7 +232,6 @@ $apiExe = "$InstallDir\api\Apex.Api.exe"
 if (-not $script:SkipService) {
     Write-Step "Registering Windows Service"
 
-    # Pre-register Event Log source so the service can write startup logs
     if (-not [System.Diagnostics.EventLog]::SourceExists('APEX')) {
         [System.Diagnostics.EventLog]::CreateEventSource('APEX', 'Application')
         Write-Ok "Registered 'APEX' Event Log source"
@@ -247,7 +241,6 @@ if (-not $script:SkipService) {
     if ($existing) {
         Write-Host "      Stopping existing service..." -ForegroundColor Gray
         Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-        # Wait for the process to fully exit before deleting
         $timeout = 30
         for ($i = 0; $i -lt $timeout; $i++) {
             $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -255,14 +248,13 @@ if (-not $script:SkipService) {
             Start-Sleep -Seconds 1
         }
         sc.exe delete $ServiceName | Out-Null
-        # Wait for deletion to complete (avoid "marked for deletion")
         for ($i = 0; $i -lt 15; $i++) {
             $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
             if (-not $svc) { break }
             Start-Sleep -Seconds 1
         }
         if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-            Write-Warn "Service still marked for deletion ΓÇö a reboot may be needed."
+            Write-Warn "Service still marked for deletion -- a reboot may be needed."
         }
     }
 
@@ -271,7 +263,7 @@ if (-not $script:SkipService) {
         start= auto `
         DisplayName= "APEX AI Middleware" | Out-Null
 
-    sc.exe description $ServiceName "APEX local AI middleware — personalized context for Claude Desktop" | Out-Null
+    sc.exe description $ServiceName "APEX local AI middleware -- personalized context for Claude Desktop" | Out-Null
     sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     Start-Service -Name $ServiceName
@@ -301,7 +293,7 @@ for ($i = 0; $i -lt $retries; $i++) {
     Start-Sleep -Seconds 2
 }
 if (-not $ready) {
-    Write-Warn "API did not respond at http://127.0.0.1:$ApiPort/health — check logs after install."
+    Write-Warn "API did not respond at http://127.0.0.1:$ApiPort/health -- check logs after install."
 } else {
     Write-Ok "API is responding (status: $($health.status))"
 }
@@ -340,33 +332,58 @@ if ($ready) {
 # ── Claude Desktop MCP config ──────────────────────────────────────────────────
 Write-Step "Configuring Claude Desktop MCP"
 
-$mcpExe = "$InstallDir\mcp\Apex.Mcp.exe"
+# Normalize path to forward slashes to avoid tab/escape bugs in JSON
+$mcpExe = ("$InstallDir\mcp\Apex.Mcp.exe").Replace('\', '/')
 $claudeConfigDir  = "$env:APPDATA\Claude"
 $claudeConfigFile = "$claudeConfigDir\claude_desktop_config.json"
 
 New-Item -ItemType Directory -Force -Path $claudeConfigDir | Out-Null
 
+# Back up existing config before any modifications
+$backupFile = $null
 if (Test-Path $claudeConfigFile) {
-    $existing = Get-Content $claudeConfigFile -Raw | ConvertFrom-Json
-    if (-not $existing.mcpServers) {
-        $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value @{}
-    }
-    $existing.mcpServers | Add-Member -MemberType NoteProperty -Name apex -Value @{
-        command = $mcpExe
-        args    = @()
-    } -Force
-    $existing | ConvertTo-Json -Depth 10 | Set-Content $claudeConfigFile -Encoding UTF8
-    Write-Ok "Merged apex MCP entry into existing claude_desktop_config.json"
-} else {
-    @{
-        mcpServers = @{
-            apex = @{
-                command = $mcpExe
-                args    = @()
+    $backupFile = "$claudeConfigFile.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Copy-Item -Path $claudeConfigFile -Destination $backupFile -Force
+    Write-Ok "Backed up existing config to $backupFile"
+}
+
+try {
+    if (Test-Path $claudeConfigFile) {
+        # Read with .NET to avoid BOM/encoding issues from Get-Content
+        $rawJson = [System.IO.File]::ReadAllText($claudeConfigFile, [System.Text.Encoding]::UTF8).Trim()
+        $existing = $rawJson | ConvertFrom-Json
+
+        if (-not $existing.mcpServers) {
+            $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value @{}
+        }
+        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name apex -Value @{
+            command = $mcpExe
+            args    = @()
+        } -Force
+
+        $newJson = $existing | ConvertTo-Json -Depth 10
+        # Write WITHOUT BOM -- critical for Claude Desktop compatibility
+        [System.IO.File]::WriteAllText($claudeConfigFile, $newJson.Trim(), [System.Text.UTF8Encoding]::new($false))
+        Write-Ok "Merged apex MCP entry into existing claude_desktop_config.json"
+    } else {
+        $config = @{
+            mcpServers = @{
+                apex = @{
+                    command = $mcpExe
+                    args    = @()
+                }
             }
         }
-    } | ConvertTo-Json -Depth 5 | Set-Content $claudeConfigFile -Encoding UTF8
-    Write-Ok "Created claude_desktop_config.json"
+        $newJson = $config | ConvertTo-Json -Depth 5
+        [System.IO.File]::WriteAllText($claudeConfigFile, $newJson.Trim(), [System.Text.UTF8Encoding]::new($false))
+        Write-Ok "Created claude_desktop_config.json"
+    }
+} catch {
+    Write-Warn "Failed to update Claude Desktop config: $_"
+    if ($backupFile -and (Test-Path $backupFile)) {
+        Copy-Item -Path $backupFile -Destination $claudeConfigFile -Force
+        Write-Warn "Restored config from backup"
+    }
 }
 
 # ── Add to PATH ────────────────────────────────────────────────────────────────
@@ -381,9 +398,9 @@ if ($currentPath -notlike "*$InstallDir\api*") {
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  ══════════════════════════════════════════════" -ForegroundColor DarkCyan
+Write-Host "  ==============================================" -ForegroundColor DarkCyan
 Write-Host "   APEX installation complete!" -ForegroundColor Green
-Write-Host "  ══════════════════════════════════════════════" -ForegroundColor DarkCyan
+Write-Host "  ==============================================" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "   API:        http://localhost:$ApiPort" -ForegroundColor White
 Write-Host "   Swagger:    http://localhost:$ApiPort/swagger" -ForegroundColor White
@@ -395,7 +412,7 @@ Write-Host ""
 Write-Host "   Next steps:" -ForegroundColor Yellow
 Write-Host "   1. Restart Claude Desktop to activate the MCP tools" -ForegroundColor White
 Write-Host "   2. In Claude, start a session with:" -ForegroundColor White
-Write-Host "      'Call apex_get_context with hint <what you're working on>'" -ForegroundColor Gray
+Write-Host "      'Call apex_get_context with hint <what you are working on>'" -ForegroundColor Gray
 Write-Host ""
 if ($script:SkipService) {
     Write-Host "   To run APEX as a service, re-run this script as Administrator." -ForegroundColor Yellow
