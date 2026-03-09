@@ -20,7 +20,6 @@ $InstallDir   = "$env:LOCALAPPDATA\APEX"
 $ApiPort      = 5000
 $OllamaEmbed  = 'nomic-embed-text'
 $OllamaChat   = 'qwen3:8b'
-$OllamaSetupUrl = 'https://ollama.com/download/OllamaSetup.exe'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 function Write-Step  { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
@@ -66,7 +65,7 @@ function Get-LatestReleaseAsset {
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor DarkCyan
 Write-Host "  ║   APEX — Adaptive Personalized EXperience  ║" -ForegroundColor DarkCyan
-Write-Host "  ║           Installer v1.2                    ║" -ForegroundColor DarkCyan
+Write-Host "  ║           Installer v1.3                    ║" -ForegroundColor DarkCyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor DarkCyan
 Write-Host ""
 
@@ -100,17 +99,24 @@ if ($dotnetMajor -lt 8) {
 Write-Step "Checking Ollama"
 $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollamaExe) {
-    Write-Host "      Ollama not found. Downloading installer..." -ForegroundColor Yellow
-    $ollamaInstaller = "$env:TEMP\OllamaSetup.exe"
-    Invoke-WebRequest -Uri $OllamaSetupUrl -OutFile $ollamaInstaller -UseBasicParsing
-    Write-Host "      Running Ollama installer (silent)..." -ForegroundColor Gray
+    Write-Host "      Ollama not found. Installing..." -ForegroundColor Yellow
 
-    # Ollama uses Inno Setup — /VERYSILENT suppresses all UI, /NORESTART skips reboot
-    $proc = Start-Process -FilePath $ollamaInstaller -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES' -Wait -PassThru
-    Remove-Item $ollamaInstaller -Force -ErrorAction SilentlyContinue
-
-    if ($proc.ExitCode -ne 0) {
-        Write-Fail "Ollama installer failed with exit code $($proc.ExitCode). Install manually from https://ollama.com"
+    # Try winget first (silent, reliable)
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Write-Host "      Installing via winget (silent)..." -ForegroundColor Gray
+        winget install --id Ollama.Ollama --accept-package-agreements --accept-source-agreements --silent
+    } else {
+        # Fallback: download and run the exe installer
+        Write-Host "      winget not available. Downloading OllamaSetup.exe..." -ForegroundColor Gray
+        $ollamaInstaller = "$env:TEMP\OllamaSetup.exe"
+        Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile $ollamaInstaller -UseBasicParsing
+        Write-Host "      Running installer — please complete the setup wizard if it appears..." -ForegroundColor Yellow
+        $proc = Start-Process -FilePath $ollamaInstaller -Wait -PassThru
+        Remove-Item $ollamaInstaller -Force -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne $null) {
+            Write-Warn "Ollama installer exited with code $($proc.ExitCode)"
+        }
     }
 
     # Refresh PATH so we can find ollama.exe
@@ -118,29 +124,18 @@ if (-not $ollamaExe) {
     $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
     $env:PATH    = "$machinePath;$userPath"
 
-    # Common install locations
-    $ollamaLocations = @(
-        "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe",
-        "$env:ProgramFiles\Ollama\ollama.exe",
-        "C:\Users\$env:USERNAME\AppData\Local\Programs\Ollama\ollama.exe"
-    )
-
+    # Also check the known install location directly
     $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
     if (-not $ollamaExe) {
-        # Try known locations directly
-        foreach ($loc in $ollamaLocations) {
-            if (Test-Path $loc) {
-                $ollamaDir = Split-Path $loc
-                $env:PATH = "$ollamaDir;$env:PATH"
-                [System.Environment]::SetEnvironmentVariable('PATH', "$userPath;$ollamaDir", 'User')
-                $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
-                break
-            }
+        $defaultPath = "$env:LOCALAPPDATA\Programs\Ollama"
+        if (Test-Path "$defaultPath\ollama.exe") {
+            $env:PATH = "$defaultPath;$env:PATH"
+            $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
         }
     }
 
     if (-not $ollamaExe) {
-        Write-Fail "Ollama installed but not found in PATH. Please close and reopen PowerShell, then re-run the installer."
+        Write-Fail "Ollama installed but not found in PATH. Close and reopen PowerShell, then re-run the installer."
     }
 
     Write-Ok "Ollama installed at $($ollamaExe.Source)"
@@ -152,14 +147,13 @@ if (-not $ollamaExe) {
 if (-not (Get-OllamaRunning)) {
     Write-Host "      Starting Ollama..." -ForegroundColor Gray
     Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden
-    # Wait up to 15 seconds for Ollama to be ready
     $ollamaReady = $false
     for ($i = 0; $i -lt 15; $i++) {
         Start-Sleep -Seconds 1
         if (Get-OllamaRunning) { $ollamaReady = $true; break }
     }
     if (-not $ollamaReady) {
-        Write-Fail "Could not start Ollama after 15 seconds. Check if another process is using port 11434."
+        Write-Fail "Could not start Ollama after 15 seconds. Check if port 11434 is in use."
     }
     Write-Ok "Ollama started"
 } else {
@@ -318,7 +312,6 @@ $claudeConfigFile = "$claudeConfigDir\claude_desktop_config.json"
 New-Item -ItemType Directory -Force -Path $claudeConfigDir | Out-Null
 
 if (Test-Path $claudeConfigFile) {
-    # Merge into existing config
     $existing = Get-Content $claudeConfigFile -Raw | ConvertFrom-Json
     if (-not $existing.mcpServers) {
         $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value @{}
@@ -330,7 +323,6 @@ if (Test-Path $claudeConfigFile) {
     $existing | ConvertTo-Json -Depth 10 | Set-Content $claudeConfigFile -Encoding UTF8
     Write-Ok "Merged apex MCP entry into existing claude_desktop_config.json"
 } else {
-    # Create fresh config
     @{
         mcpServers = @{
             apex = @{
