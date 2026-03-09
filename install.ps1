@@ -247,8 +247,23 @@ if (-not $script:SkipService) {
     if ($existing) {
         Write-Host "      Stopping existing service..." -ForegroundColor Gray
         Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        # Wait for the process to fully exit before deleting
+        $timeout = 30
+        for ($i = 0; $i -lt $timeout; $i++) {
+            $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+            if (-not $svc -or $svc.Status -eq 'Stopped') { break }
+            Start-Sleep -Seconds 1
+        }
         sc.exe delete $ServiceName | Out-Null
-        Start-Sleep -Seconds 2
+        # Wait for deletion to complete (avoid "marked for deletion")
+        for ($i = 0; $i -lt 15; $i++) {
+            $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+            if (-not $svc) { break }
+            Start-Sleep -Seconds 1
+        }
+        if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+            Write-Warn "Service still marked for deletion ΓÇö a reboot may be needed."
+        }
     }
 
     sc.exe create $ServiceName `

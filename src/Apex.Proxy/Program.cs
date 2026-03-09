@@ -22,6 +22,60 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
 
+// Shadow-copy: run from temp so the install directory is never locked
+// This allows updates/uninstalls without quitting Claude Desktop.
+if (Environment.GetEnvironmentVariable("APEX_PROXY_SHADOW") != "1")
+{
+    var src = Environment.ProcessPath!;
+    var shadowDir = Path.Combine(Path.GetTempPath(), "apex-proxy", Path.GetRandomFileName());
+    Directory.CreateDirectory(shadowDir);
+    var shadowExe = Path.Combine(shadowDir, Path.GetFileName(src));
+
+    // Copy all files from the proxy directory (exe + deps)
+    var srcDir = Path.GetDirectoryName(src)!;
+    foreach (var file in Directory.GetFiles(srcDir))
+        File.Copy(file, Path.Combine(shadowDir, Path.GetFileName(file)), true);
+
+    var shadowPsi = new ProcessStartInfo
+    {
+        FileName = shadowExe,
+        UseShellExecute = false,
+        RedirectStandardInput = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError = false,
+    };
+    // Pass through all original args
+    foreach (var a in args) shadowPsi.ArgumentList.Add(a);
+    shadowPsi.Environment["APEX_PROXY_SHADOW"] = "1";
+
+    using var shadow = Process.Start(shadowPsi)!;
+
+    // Pipe stdin ΓåÆ shadow stdin
+    var pipeIn = Task.Run(async () =>
+    {
+        try
+        {
+            await Console.OpenStandardInput().CopyToAsync(shadow.StandardInput.BaseStream);
+            shadow.StandardInput.Close();
+        }
+        catch { /* Claude closed stdin */ }
+    });
+
+    // Pipe shadow stdout ΓåÆ our stdout
+    var pipeOut = Task.Run(async () =>
+    {
+        try { await shadow.StandardOutput.BaseStream.CopyToAsync(Console.OpenStandardOutput()); }
+        catch { /* shadow exited */ }
+    });
+
+    await shadow.WaitForExitAsync();
+
+    // Cleanup shadow copy (best-effort)
+    try { Directory.Delete(shadowDir, true); } catch { }
+
+    return shadow.ExitCode;
+}
+
 // Capture stdout BEFORE redirecting (MCP protocol must use raw stdout)
 var stdoutStream = new FileStream(
     new SafeFileHandle(GetStdHandle(-11), ownsHandle: false),
