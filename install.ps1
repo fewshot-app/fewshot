@@ -61,6 +61,14 @@ function Get-LatestReleaseAsset {
     }
 }
 
+function Invoke-OllamaPull {
+    param([string]$Model)
+    # Ollama outputs ANSI progress spinners to stderr which PowerShell treats as errors.
+    # Use Start-Process to isolate it completely from PowerShell's error stream.
+    $proc = Start-Process -FilePath 'ollama' -ArgumentList "pull $Model" -NoNewWindow -Wait -PassThru
+    return $proc.ExitCode -eq 0
+}
+
 # ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor DarkCyan
@@ -164,12 +172,18 @@ if (-not (Get-OllamaRunning)) {
 Write-Step "Pulling Ollama models (this may take a few minutes on first run)"
 
 Write-Host "      Pulling $OllamaEmbed..." -ForegroundColor Gray
-ollama pull $OllamaEmbed
-Write-Ok "$OllamaEmbed ready"
+if (Invoke-OllamaPull $OllamaEmbed) {
+    Write-Ok "$OllamaEmbed ready"
+} else {
+    Write-Warn "Failed to pull $OllamaEmbed — you can pull it manually later: ollama pull $OllamaEmbed"
+}
 
 Write-Host "      Pulling $OllamaChat..." -ForegroundColor Gray
-ollama pull $OllamaChat
-Write-Ok "$OllamaChat ready"
+if (Invoke-OllamaPull $OllamaChat) {
+    Write-Ok "$OllamaChat ready"
+} else {
+    Write-Warn "Failed to pull $OllamaChat — you can pull it manually later: ollama pull $OllamaChat"
+}
 
 # ── Download release ───────────────────────────────────────────────────────────
 Write-Step "Downloading latest APEX release"
