@@ -92,6 +92,36 @@ public class ApexTools
     }
 
     [McpServerTool, Description(
+        "Scans text content for PII, secrets, and sensitive data using APEX's three-stage audit pipeline " +
+        "(regex patterns, Presidio NLP, Shannon entropy). Use before sending content that may contain " +
+        "connection strings, API keys, SSNs, bearer tokens, private keys, or other sensitive information. " +
+        "Returns safe/blocked verdict with specific findings.")]
+    public async Task<string> apex_scan(
+        [Description("The text content to scan for sensitive data")]
+        string content)
+    {
+        var result = await _apex.ScanContentAsync(content);
+
+        if (result.Findings.Count == 0)
+            return "[APEX SCAN] \u2705 Clean — no sensitive data detected.";
+
+        var verdict = result.IsSafe
+            ? (result.RequiresReview ? "\u26a0\ufe0f Review recommended" : "\u2705 Safe")
+            : "\ud83d\uded1 BLOCKED — sensitive data detected";
+
+        var findingLines = result.Findings.Select(f =>
+            $"  \u2022 {f.DetectedType} ({f.Stage}, confidence: {f.Confidence:F2})");
+
+        var output = $"[APEX SCAN] {verdict}\nFindings:\n{string.Join("\n", findingLines)}";
+
+        if (!result.IsSafe && result.RedactedContent != null)
+            output += $"\n\nRedacted version available — {result.RedactedContent.Length} chars. " +
+                      "Consider using the redacted version instead.";
+
+        return output;
+    }
+
+    [McpServerTool, Description(
         "Removes a project from APEX by name. Does not delete associated sessions or memories. " +
         "Use apex_list_projects first to confirm the exact name.")]
     public async Task<string> apex_remove_project(

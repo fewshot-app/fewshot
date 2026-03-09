@@ -106,6 +106,21 @@ public class ApexClient
         await Http.PostAsJsonAsync("/api/messages", new { sessionId, role, content });
     }
 
+    // ── Audit / Scan ──────────────────────────────────────────────────────────
+
+    public async Task<ScanResult> ScanContentAsync(string content)
+    {
+        var resp = await Http.PostAsJsonAsync("/api/audit/analyze", new { content, sessionId = (int?)null });
+        if (!resp.IsSuccessStatusCode)
+            return new ScanResult(true, false, "Scan unavailable — APEX API returned " + resp.StatusCode, []);
+
+        var result = await resp.Content.ReadFromJsonAsync<AuditResponse>(_json);
+        if (result is null)
+            return new ScanResult(true, false, "Scan returned empty response.", []);
+
+        return new ScanResult(result.IsSafe, result.RequiresReview, result.RedactedContent, result.Findings);
+    }
+
     // ── Memory ────────────────────────────────────────────────────────────────
 
     public async Task<string> SearchMemoryAsync(string query, int topK = 5)
@@ -126,3 +141,14 @@ public record ProjectDto(int ProjectId, string Name, string DisplayName, string 
 public record ProjectSessionDto(int SessionId, bool IsNew, string Project);
 public record ContextResult(string AssembledContext, int TotalTokens);
 public record MemoryResult(string Summary, string? Solution, string? Tags, double RelevanceScore);
+
+// Audit / Scan DTOs
+public record ScanResult(bool IsSafe, bool RequiresReview, string? RedactedContent, List<ScanFinding> Findings);
+public record ScanFinding(string DetectedType, string Stage, double Confidence);
+public record AuditResponse
+{
+    public bool IsSafe { get; set; }
+    public bool RequiresReview { get; set; }
+    public string? RedactedContent { get; set; }
+    public List<ScanFinding> Findings { get; set; } = [];
+}

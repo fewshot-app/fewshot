@@ -59,7 +59,7 @@ C:\Users\Joe\source\repos\APEX\
 │   │   └── Pages/              — Overview, Memories, Preferences, AntiPatterns,
 │   │                             Sessions, Tasks, Projects, Experiments, Audit,
 │   │                             Packs, Settings
-│   ├── Apex.Mcp/               — MCP stdio server (7 tools)
+│   ├── Apex.Mcp/               — MCP stdio server (8 tools)
 │   └── Apex.Proxy/             — MCP audit proxy (wraps any MCP server)
 ├── tools/
 │   └── Apex.PackTool/          — CLI: apex-pack new/validate/encrypt/decrypt/keygen
@@ -210,6 +210,7 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 | `apex_list_projects` | Lists all active projects |
 | `apex_add_project` | Adds new project with keywords |
 | `apex_remove_project` | Removes project by name |
+| `apex_scan` | Scans text for PII/secrets via 3-stage audit pipeline |
 
 ---
 
@@ -241,7 +242,7 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 
 ## Pending Work (Priority Order)
 
-1. **`apex_scan` MCP tool** — scan user-typed content via system prompt; ~2hr lift
+1. ~~**`apex_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
 2. **Pack export endpoint** — `GET /api/packs/export/{project}` to export real memories as pack JSON
 3. **APEX.Licensing deploy** — create repo, docker compose up, seed packs, wire Lemon Squeezy
 4. **Proxy Audit dashboard page** — visualize `ProxyAuditLog` findings (currently API-only)
