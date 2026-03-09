@@ -3,8 +3,8 @@
 .SYNOPSIS
     APEX installer — Adaptive Personalized EXperience
 .DESCRIPTION
-    Downloads the latest APEX release, installs as a Windows Service,
-    pulls Ollama models, and configures Claude Desktop MCP automatically.
+    Downloads the latest APEX release, installs Ollama (if needed),
+    installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
 .EXAMPLE
     irm https://raw.githubusercontent.com/jstarkwv/APEX/feature/no-docker/install.ps1 | iex
 #>
@@ -20,6 +20,7 @@ $InstallDir   = "$env:LOCALAPPDATA\APEX"
 $ApiPort      = 5000
 $OllamaEmbed  = 'nomic-embed-text'
 $OllamaChat   = 'qwen3:8b'
+$OllamaSetupUrl = 'https://ollama.com/download/OllamaSetup.exe'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 function Write-Step  { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
@@ -65,7 +66,7 @@ function Get-LatestReleaseAsset {
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════╗" -ForegroundColor DarkCyan
 Write-Host "  ║   APEX — Adaptive Personalized EXperience  ║" -ForegroundColor DarkCyan
-Write-Host "  ║           Installer v1.0                    ║" -ForegroundColor DarkCyan
+Write-Host "  ║           Installer v1.2                    ║" -ForegroundColor DarkCyan
 Write-Host "  ╚══════════════════════════════════════════╝" -ForegroundColor DarkCyan
 Write-Host ""
 
@@ -95,29 +96,70 @@ if ($dotnetMajor -lt 8) {
     Write-Ok ".NET $dotnetMajor found"
 }
 
-# ── Ollama check ───────────────────────────────────────────────────────────────
+# ── Ollama install + start ─────────────────────────────────────────────────────
 Write-Step "Checking Ollama"
 $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
 if (-not $ollamaExe) {
-    Write-Host ""
-    Write-Host "  Ollama is not installed. Please install it from https://ollama.com" -ForegroundColor Yellow
-    Write-Host "  After installing, re-run this script." -ForegroundColor Yellow
-    Write-Host ""
-    $response = Read-Host "  Open ollama.com in your browser now? [Y/n]"
-    if ($response -ne 'n' -and $response -ne 'N') {
-        Start-Process 'https://ollama.com'
+    Write-Host "      Ollama not found. Downloading installer..." -ForegroundColor Yellow
+    $ollamaInstaller = "$env:TEMP\OllamaSetup.exe"
+    Invoke-WebRequest -Uri $OllamaSetupUrl -OutFile $ollamaInstaller -UseBasicParsing
+    Write-Host "      Running Ollama installer (silent)..." -ForegroundColor Gray
+
+    # Ollama uses Inno Setup — /VERYSILENT suppresses all UI, /NORESTART skips reboot
+    $proc = Start-Process -FilePath $ollamaInstaller -ArgumentList '/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES' -Wait -PassThru
+    Remove-Item $ollamaInstaller -Force -ErrorAction SilentlyContinue
+
+    if ($proc.ExitCode -ne 0) {
+        Write-Fail "Ollama installer failed with exit code $($proc.ExitCode). Install manually from https://ollama.com"
     }
-    exit 1
+
+    # Refresh PATH so we can find ollama.exe
+    $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+    $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    $env:PATH    = "$machinePath;$userPath"
+
+    # Common install locations
+    $ollamaLocations = @(
+        "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe",
+        "$env:ProgramFiles\Ollama\ollama.exe",
+        "C:\Users\$env:USERNAME\AppData\Local\Programs\Ollama\ollama.exe"
+    )
+
+    $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
+    if (-not $ollamaExe) {
+        # Try known locations directly
+        foreach ($loc in $ollamaLocations) {
+            if (Test-Path $loc) {
+                $ollamaDir = Split-Path $loc
+                $env:PATH = "$ollamaDir;$env:PATH"
+                [System.Environment]::SetEnvironmentVariable('PATH', "$userPath;$ollamaDir", 'User')
+                $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
+                break
+            }
+        }
+    }
+
+    if (-not $ollamaExe) {
+        Write-Fail "Ollama installed but not found in PATH. Please close and reopen PowerShell, then re-run the installer."
+    }
+
+    Write-Ok "Ollama installed at $($ollamaExe.Source)"
 } else {
     Write-Ok "Ollama found at $($ollamaExe.Source)"
 }
 
+# Start Ollama if not running
 if (-not (Get-OllamaRunning)) {
-    Write-Warn "Ollama is not running. Starting it..."
+    Write-Host "      Starting Ollama..." -ForegroundColor Gray
     Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden
-    Start-Sleep -Seconds 3
-    if (-not (Get-OllamaRunning)) {
-        Write-Fail "Could not start Ollama. Please run 'ollama serve' manually and re-run the installer."
+    # Wait up to 15 seconds for Ollama to be ready
+    $ollamaReady = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        if (Get-OllamaRunning) { $ollamaReady = $true; break }
+    }
+    if (-not $ollamaReady) {
+        Write-Fail "Could not start Ollama after 15 seconds. Check if another process is using port 11434."
     }
     Write-Ok "Ollama started"
 } else {
@@ -160,7 +202,7 @@ Remove-Item $mcpZip
 Write-Ok "MCP server extracted to $InstallDir\mcp"
 
 # Dashboard
-$dashAsset = Get-LatestReleaseAsset 'Apex.Dashboard-win-x64.zip'
+$dashAsset = Get-LatestReleaseAsset 'Apex.Dashboard*.zip'
 if ($dashAsset) {
     Write-Host "      Downloading $($dashAsset.name)..." -ForegroundColor Gray
     $dashZip = "$env:TEMP\Apex.Dashboard.zip"
@@ -168,6 +210,17 @@ if ($dashAsset) {
     Expand-Archive -Path $dashZip -DestinationPath "$InstallDir\dashboard" -Force
     Remove-Item $dashZip
     Write-Ok "Dashboard extracted to $InstallDir\dashboard"
+}
+
+# Proxy
+$proxyAsset = Get-LatestReleaseAsset 'Apex.Proxy-win-x64.zip'
+if ($proxyAsset) {
+    Write-Host "      Downloading $($proxyAsset.name)..." -ForegroundColor Gray
+    $proxyZip = "$env:TEMP\Apex.Proxy.zip"
+    Invoke-WebRequest -Uri $proxyAsset.browser_download_url -OutFile $proxyZip -UseBasicParsing
+    Expand-Archive -Path $proxyZip -DestinationPath "$InstallDir\proxy" -Force
+    Remove-Item $proxyZip
+    Write-Ok "Proxy extracted to $InstallDir\proxy"
 }
 
 # ── Windows Service ────────────────────────────────────────────────────────────
