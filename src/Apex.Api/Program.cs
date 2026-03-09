@@ -14,13 +14,14 @@ using Microsoft.EntityFrameworkCore;
 // ── Pin working directory so Windows Service resolves paths correctly ──
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
-// ── Startup logging to file (captures service startup failures) ──
-var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
-Directory.CreateDirectory(logDir);
-var startupLogPath = Path.Combine(logDir, "startup.log");
+// ── Startup logging to Windows Event Log ──
+const string EventSource = "APEX";
+const string EventLogName = "Application";
+if (!System.Diagnostics.EventLog.SourceExists(EventSource))
+    System.Diagnostics.EventLog.CreateEventSource(EventSource, EventLogName);
 
 void Log(string message) =>
-    File.AppendAllText(startupLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
+    System.Diagnostics.EventLog.WriteEntry(EventSource, message, System.Diagnostics.EventLogEntryType.Information);
 
 try
 {
@@ -208,6 +209,7 @@ Log("APEX stopped.");
 }
 catch (Exception ex)
 {
-    Log($"FATAL: {ex}");
+    System.Diagnostics.EventLog.WriteEntry(EventSource, $"FATAL: {ex}",
+        System.Diagnostics.EventLogEntryType.Error);
     throw;
 }

@@ -237,28 +237,11 @@ $apiExe = "$InstallDir\api\Apex.Api.exe"
 if (-not $script:SkipService) {
     Write-Step "Registering Windows Service"
 
-    # Run as current user so the service can access AppData, Ollama, etc.
-    $svcUser = "$env:USERDOMAIN\$env:USERNAME"
-    Write-Host "      Service will run as: $svcUser" -ForegroundColor Gray
-    $svcPassword = Read-Host "      Enter password for $svcUser" -AsSecureString
-    $svcPasswordPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($svcPassword))
-
-    # Grant logon-as-a-service right
-    $tempCfg = "$env:TEMP\apex-secedit.cfg"
-    $tempDb  = "$env:TEMP\apex-secedit.sdb"
-    secedit /export /cfg $tempCfg | Out-Null
-    $content = Get-Content $tempCfg -Raw
-    if ($content -match 'SeServiceLogonRight\s*=\s*(.+)') {
-        $current = $Matches[1]
-        if ($current -notlike "*$env:USERNAME*") {
-            $content = $content -replace "(SeServiceLogonRight\s*=\s*.+)", "`$1,$svcUser"
-            Set-Content $tempCfg $content
-            secedit /configure /db $tempDb /cfg $tempCfg /areas USER_RIGHTS | Out-Null
-        }
+    # Pre-register Event Log source so the service can write startup logs
+    if (-not [System.Diagnostics.EventLog]::SourceExists('APEX')) {
+        [System.Diagnostics.EventLog]::CreateEventSource('APEX', 'Application')
+        Write-Ok "Registered 'APEX' Event Log source"
     }
-    Remove-Item $tempCfg, $tempDb -Force -ErrorAction SilentlyContinue
-    Write-Ok "Logon-as-a-service right granted"
 
     $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($existing) {
@@ -271,11 +254,7 @@ if (-not $script:SkipService) {
     sc.exe create $ServiceName `
         binPath= "`"$apiExe`"" `
         start= auto `
-        obj= "$svcUser" `
-        password= "$svcPasswordPlain" `
         DisplayName= "APEX AI Middleware" | Out-Null
-
-    $svcPasswordPlain = $null  # clear from memory
 
     sc.exe description $ServiceName "APEX local AI middleware — personalized context for Claude Desktop" | Out-Null
     sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
