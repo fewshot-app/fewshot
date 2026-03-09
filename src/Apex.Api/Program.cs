@@ -14,24 +14,8 @@ using Microsoft.EntityFrameworkCore;
 // ── Pin working directory so Windows Service resolves paths correctly ──
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
-// ── Startup logging to Windows Event Log ──
-const string EventSource = "APEX";
-const string EventLogName = "Application";
-if (!System.Diagnostics.EventLog.SourceExists(EventSource))
-    System.Diagnostics.EventLog.CreateEventSource(EventSource, EventLogName);
-
-void Log(string message) =>
-    System.Diagnostics.EventLog.WriteEntry(EventSource, message, System.Diagnostics.EventLogEntryType.Information);
-
-try
-{
-Log("APEX starting...");
-Log($"  BaseDirectory: {AppContext.BaseDirectory}");
-Log($"  CurrentDirectory: {Directory.GetCurrentDirectory()}");
-Log($"  User: {Environment.UserName}");
-Log($"  Is service: {!Environment.UserInteractive}");
-
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService();
 
 // ── SQLite connection string (expands %APPDATA%) ─────────────────
 var rawConn = builder.Configuration.GetConnectionString("ApexDb")
@@ -146,16 +130,41 @@ using (var scope = app.Services.CreateScope())
     catch { /* first run */ }
 }
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() ||
+    builder.Configuration.GetValue<bool>("Apex:EnableSwagger"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
 app.UseCors("Dashboard");
-app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [] });
+app.UseStaticFiles(new StaticFileOptions
+{
+    ServeUnknownFileTypes = true,
+    DefaultContentType = "application/octet-stream"
+});
+if (app.Environment.IsDevelopment() ||
+    builder.Configuration.GetValue<bool>("Apex:EnableHangfire"))
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [] });
+}
 app.MapControllers();
 app.MapHub<ApexHub>("/hubs/apex");
+
+// SPA fallback ΓÇö skip paths handled by middleware (Swagger, Hangfire)
+app.MapFallback(async context =>
+{
+    var path = context.Request.Path.Value ?? "";
+    if (path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/hangfire", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = 404;
+        return;
+    }
+    context.Response.ContentType = "text/html";
+    await context.Response.SendFileAsync(
+        app.Environment.WebRootFileProvider.GetFileInfo("index.html"));
+});
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
@@ -203,13 +212,4 @@ app.MapGet("/health", async (IHttpClientFactory httpFactory, IConfiguration conf
     });
 });
 
-Log("Host built and configured. Calling app.Run()...");
 app.Run();
-Log("APEX stopped.");
-}
-catch (Exception ex)
-{
-    System.Diagnostics.EventLog.WriteEntry(EventSource, $"FATAL: {ex}",
-        System.Diagnostics.EventLogEntryType.Error);
-    throw;
-}
