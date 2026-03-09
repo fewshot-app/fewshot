@@ -1,0 +1,184 @@
+@page "/proxy-audit"
+@using Apex.Dashboard.Services
+@inject ApexApiClient Api
+
+<h2>Proxy Audit</h2>
+<p>MCP tool traffic intercepted by Apex.Proxy — findings from outbound arguments and inbound results.</p>
+
+@if (_error != null)
+{
+    <div style="background:#fdd;padding:10px;border-radius:4px;margin-bottom:16px">@_error</div>
+}
+
+@if (_stats != null)
+{
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+        <div style="flex:1;min-width:140px;background:#f8f9fa;border-radius:8px;padding:16px;text-align:center">
+            <div style="font-size:2em;font-weight:bold">@_stats.Total</div>
+            <div style="color:#666">Total Events</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:#fef3f2;border-radius:8px;padding:16px;text-align:center">
+            <div style="font-size:2em;font-weight:bold;color:#dc2626">@_stats.Redacted</div>
+            <div style="color:#666">Redacted</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:#f0fdf4;border-radius:8px;padding:16px;text-align:center">
+            <div style="font-size:2em;font-weight:bold;color:#16a34a">@(_stats.Total - _stats.Redacted)</div>
+            <div style="color:#666">Clean</div>
+        </div>
+        <div style="flex:1;min-width:140px;background:#eff6ff;border-radius:8px;padding:16px;text-align:center">
+            <div style="font-size:2em;font-weight:bold;color:#2563eb">@_stats.LastDay</div>
+            <div style="color:#666">Last 24h</div>
+        </div>
+    </div>
+
+    @if (_stats.TopTypes.Count > 0)
+    {
+        <div style="margin-bottom:24px">
+            <h3 style="margin-bottom:8px">Top Finding Types</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                @foreach (var t in _stats.TopTypes)
+                {
+                    <span style="background:#e5e7eb;padding:4px 12px;border-radius:16px;font-size:0.9em">
+                        @t.Type <strong>(@t.Count)</strong>
+                    </span>
+                }
+            </div>
+        </div>
+    }
+}
+
+<!-- Filter -->
+<div style="margin-bottom:12px;display:flex;gap:12px;align-items:center">
+    <label>
+        <input type="checkbox" @bind="_redactedOnly" @bind:event="oninput" @onchange="LoadLogsAsync" />
+        Redacted only
+    </label>
+    <button @onclick="LoadLogsAsync" style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
+        Refresh
+    </button>
+</div>
+
+<!-- Logs Table -->
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_logs.Count == 0)
+{
+    <p style="color:#888">No proxy audit events recorded yet. Events appear when Apex.Proxy intercepts MCP tool traffic.</p>
+}
+else
+{
+    <table style="width:100%;border-collapse:collapse;font-size:0.9em">
+        <thead>
+            <tr style="border-bottom:2px solid #e5e7eb;text-align:left">
+                <th style="padding:8px">Time</th>
+                <th style="padding:8px">Dir</th>
+                <th style="padding:8px">Method</th>
+                <th style="padding:8px">Findings</th>
+                <th style="padding:8px">Types</th>
+                <th style="padding:8px">Confidence</th>
+                <th style="padding:8px">Redacted</th>
+                <th style="padding:8px">Source</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var log in _logs)
+            {
+                <tr style="border-bottom:1px solid #f3f4f6;background:@(log.WasRedacted ? "#fef3f2" : "transparent")">
+                    <td style="padding:6px 8px;white-space:nowrap">@log.Timestamp.ToLocalTime().ToString("MM/dd HH:mm:ss")</td>
+                    <td style="padding:6px 8px">
+                        <span style="background:@(log.Direction == "outbound" ? "#dbeafe" : "#f3e8ff");padding:2px 8px;border-radius:4px;font-size:0.85em">
+                            @log.Direction
+                        </span>
+                    </td>
+                    <td style="padding:6px 8px;font-family:monospace;font-size:0.85em">@log.Method</td>
+                    <td style="padding:6px 8px;text-align:center">@log.FindingCount</td>
+                    <td style="padding:6px 8px">
+                        @foreach (var type in log.FindingTypes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <span style="background:@GetTypeColor(type);padding:1px 6px;border-radius:4px;font-size:0.8em;margin-right:4px">
+                                @type.Trim()
+                            </span>
+                        }
+                    </td>
+                    <td style="padding:6px 8px">@log.MaxConfidence.ToString("F2")</td>
+                    <td style="padding:6px 8px;text-align:center">
+                        @if (log.WasRedacted)
+                        {
+                            <span style="color:#dc2626;font-weight:bold">YES</span>
+                        }
+                    </td>
+                    <td style="padding:6px 8px;font-size:0.85em;color:#888">@log.Source</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button @onclick="PrevPage" disabled="@(_page <= 1)"
+                style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
+            Prev
+        </button>
+        <span>Page @_page of @_totalPages (@_total events)</span>
+        <button @onclick="NextPage" disabled="@(_page >= _totalPages)"
+                style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
+            Next
+        </button>
+    </div>
+}
+
+@code {
+    private List<ProxyAuditLogDto> _logs = [];
+    private ProxyAuditStatsDto? _stats;
+    private string? _error;
+    private bool _loading;
+    private bool _redactedOnly;
+    private int _page = 1;
+    private int _total;
+    private int _totalPages => Math.Max(1, (int)Math.Ceiling(_total / 50.0));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatsAsync();
+        await LoadLogsAsync();
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        try { _stats = await Api.GetProxyAuditStatsAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task LoadLogsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Api.GetProxyAuditLogsAsync(_page, _redactedOnly);
+            if (result != null)
+            {
+                _logs = result.Logs;
+                _total = result.Total;
+            }
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        _loading = false;
+    }
+
+    private async Task PrevPage() { if (_page > 1) { _page--; await LoadLogsAsync(); } }
+    private async Task NextPage() { if (_page < _totalPages) { _page++; await LoadLogsAsync(); } }
+
+    private static string GetTypeColor(string type) => type.Trim() switch
+    {
+        "SSN" => "#fee2e2",
+        "ConnectionString" => "#fef9c3",
+        "BearerToken" or "JwtToken" => "#fce7f3",
+        "PrivateKey" => "#fee2e2",
+        "CreditCard" => "#fee2e2",
+        "HighEntropySecret" => "#f3e8ff",
+        "GitHubToken" or "AWSKey" => "#fef9c3",
+        _ => "#f3f4f6"
+    };
+}

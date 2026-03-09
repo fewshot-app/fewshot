@@ -115,6 +115,13 @@ public class ApexApiClient
     public async Task DeleteProjectAsync(int id) =>
         await _http.DeleteAsync($"/api/projects/{id}");
 
+    // Proxy Audit
+    public async Task<ProxyAuditStatsDto?> GetProxyAuditStatsAsync() =>
+        await _http.GetFromJsonAsync<ProxyAuditStatsDto>("/api/proxy-audit/stats");
+
+    public async Task<ProxyAuditLogsResult?> GetProxyAuditLogsAsync(int page = 1, bool redactedOnly = false) =>
+        await _http.GetFromJsonAsync<ProxyAuditLogsResult>($"/api/proxy-audit/logs?page={page}&pageSize=50&redactedOnly={redactedOnly}");
+
     // Packs
     public async Task<PackExportDto?> ExportPackAsync(string project) =>
         await _http.GetFromJsonAsync<PackExportDto>($"/api/packs/export/{project}");
@@ -299,3 +306,40 @@ public class PackValidationResultDto
 
 public record MachineIdDto(string MachineId);
 public record KeygenDto(string Key);
+
+// Proxy Audit DTOs
+public class ProxyAuditStatsDto
+{
+    public int Total { get; set; }
+    public int Redacted { get; set; }
+    public int LastDay { get; set; }
+    public List<ProxyAuditTypeCount> TopTypes { get; set; } = [];
+}
+
+public class ProxyAuditTypeCount
+{
+    public string Type { get; set; } = "";
+    public int Count { get; set; }
+}
+
+public class ProxyAuditLogsResult
+{
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public List<ProxyAuditLogDto> Logs { get; set; } = [];
+}
+
+public class ProxyAuditLogDto
+{
+    public int Id { get; set; }
+    public string Direction { get; set; } = "";
+    public string Method { get; set; } = "";
+    public string FindingTypes { get; set; } = "";
+    public int FindingCount { get; set; }
+    public double MaxConfidence { get; set; }
+    public bool WasRedacted { get; set; }
+    public string? Snippet { get; set; }
+    public string Source { get; set; } = "";
+    public DateTime Timestamp { get; set; }
+}
