@@ -62,7 +62,7 @@ C:\Users\Joe\source\repos\APEX\
 │   ├── Apex.Mcp/               — MCP stdio server (8 tools)
 │   └── Apex.Proxy/             — MCP audit proxy (wraps any MCP server)
 ├── tools/
-│   └── Apex.PackTool/          — CLI: apex-pack new/validate/encrypt/decrypt/keygen
+│   └── Apex.PackTool/          — CLI: apex-pack new/validate/encrypt/decrypt/keygen/machine-id
 ├── install.ps1                 — One-line installer (Windows Service + Claude Desktop config)
 ├── uninstall.ps1
 ├── README.md                   — Privacy-first positioning
@@ -243,22 +243,26 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 ## Pending Work (Priority Order)
 
 1. ~~**`apex_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
-2. **Pack export endpoint** — `GET /api/packs/export/{project}` to export real memories as pack JSON
-3. **APEX.Licensing deploy** — create repo, docker compose up, seed packs, wire Lemon Squeezy
-4. **Proxy Audit dashboard page** — visualize `ProxyAuditLog` findings (currently API-only)
-5. **GitHub Release** — `git tag v1.0.0 && git push origin v1.0.0` to trigger release workflow
-6. **Pack content** — build real wordpress-divi pack from actual WVU Medicine memories
-7. **GPU passthrough for Ollama** — consolidation currently CPU-bound (~2min/session)
-8. **Real task executors** — Phase 4 agency handlers are still placeholders
+2. ~~**Pack system (7c)**~~ ✅ DONE — models, PackCrypto (AES-256-CBC), import/export services, PacksController, dashboard Packs page, Apex.PackTool CLI
+3. ~~**Pack export endpoint**~~ ✅ DONE — `GET /api/packs/export/{project}` + `POST /api/packs/import` + validate/keygen/machine-id
+4. **APEX.Licensing deploy** — create repo, docker compose up, seed packs, wire Lemon Squeezy
+5. **Proxy Audit dashboard page** — visualize `ProxyAuditLog` findings (currently API-only)
+6. **GitHub Release** — `git tag v1.0.0 && git push origin v1.0.0` to trigger release workflow
+7. **Pack content** — build real wordpress-divi pack from actual WVU Medicine memories
+8. **GPU passthrough for Ollama** — consolidation currently CPU-bound (~2min/session); RX 580 not ROCm-compatible, needs NVIDIA upgrade
+9. **Real task executors** — Phase 4 agency handlers are still placeholders
 
 ---
 
 ## Recent Commits (this branch)
 
 ```
+68fb650  feat: add Apex.PackTool CLI — new/validate/encrypt/decrypt/keygen/machine-id
+a8ee93e  feat: add pack system (7c) — models, crypto, import/export services, controller, dashboard page
+4d6c230  feat: add apex_scan MCP tool for PII/secret detection
+0ea7744  docs: update STATUS.md — reflects no-docker branch, proxy, packs, privacy scope
 a9b58d4  docs: rewrite README with privacy-first positioning and accurate proxy scope
 e0265d2  feat: add Apex.Proxy MCP audit proxy + ProxyAuditLog + ProxyAuditController
-caeccc9  docs: add README and cleanup (previous session)
 b5099e7  feat: add install.ps1/uninstall.ps1 + GitHub Actions release workflow
 e010d0b  feat: SQLite migration — remove Docker/SQL Server/Redis dependencies
 ```
