@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Apex.Infrastructure.Memory;
 
 /// <summary>
-/// Calls local Ollama qwen3:8b for text generation and structured extraction.
+/// Calls local Ollama gemma4 for text generation and structured extraction.
 /// </summary>
 public class LlmService : ILlmService
 {
@@ -24,7 +24,7 @@ public class LlmService : ILlmService
     public LlmService(IHttpClientFactory httpFactory, IConfiguration config, ILogger<LlmService> logger)
     {
         _http = httpFactory.CreateClient("Ollama");
-        _model = config["Apex:Ollama:SummarizationModel"] ?? "qwen3:8b";
+        _model = config["Apex:Ollama:SummarizationModel"] ?? "gemma4";
         _logger = logger;
     }
 
@@ -35,7 +35,7 @@ public class LlmService : ILlmService
             ["model"] = _model,
             ["prompt"] = prompt,
             ["stream"] = false,
-            ["options"] = new { temperature, num_predict = 1024 }
+            ["options"] = new { temperature, num_predict = 4096 }
         };
 
         if (systemPrompt != null)
@@ -61,9 +61,11 @@ public class LlmService : ILlmService
     public async Task<T?> GenerateJsonAsync<T>(string prompt, string? systemPrompt = null, double temperature = 0.1) where T : class
     {
         // Append JSON instruction
-        var jsonPrompt = prompt + "\n\nRespond with ONLY valid JSON, no markdown, no explanation. /no_think";
+        var jsonPrompt = prompt + "\n\nRespond with ONLY valid JSON, no markdown, no explanation.";
 
         var raw = await GenerateAsync(jsonPrompt, systemPrompt, temperature);
+        _logger.LogInformation("Raw Ollama JSON response ({Len} chars): {Raw}",
+            raw.Length, raw[..Math.Min(1000, raw.Length)]);
 
         // Strip markdown fences if present
         raw = raw.Trim();
@@ -75,10 +77,11 @@ public class LlmService : ILlmService
             raw = raw[..^3];
         raw = raw.Trim();
 
-        // qwen3 sometimes wraps in <think>...</think> tags — strip them
-        var thinkEnd = raw.IndexOf("</think>", StringComparison.OrdinalIgnoreCase);
-        if (thinkEnd >= 0)
-            raw = raw[(thinkEnd + 8)..].Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _logger.LogWarning("Ollama returned empty response after stripping");
+            return null;
+        }
 
         try
         {

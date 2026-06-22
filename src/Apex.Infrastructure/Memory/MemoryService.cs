@@ -41,7 +41,16 @@ public class MemoryService : IMemoryService
             return null;
         }
 
-        var embedding = await _embeddings.EmbedAsync(BuildEmbeddingText(request));
+        float[] embedding;
+        try
+        {
+            embedding = await _embeddings.EmbedAsync(BuildEmbeddingText(request));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            _logger.LogWarning("Embedding service unavailable, cannot store memory: {Message}", ex.Message);
+            return null;
+        }
         var pointId = Guid.NewGuid().ToString();
         var now = DateTime.UtcNow;
 
@@ -71,7 +80,16 @@ public class MemoryService : IMemoryService
 
     public async Task<List<SemanticMemory>> SearchAsync(string query, int sessionId, int limit = 5, double minScore = 0.55)
     {
-        var queryVector = await _embeddings.EmbedAsync(query);
+        float[] queryVector;
+        try
+        {
+            queryVector = await _embeddings.EmbedAsync(query);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            _logger.LogWarning("Embedding service unavailable, returning empty results: {Message}", ex.Message);
+            return [];
+        }
 
         // Pull all embeddings and score in-process
         // For thousands of memories this is ~10-20ms — acceptable for local use
@@ -125,7 +143,17 @@ public class MemoryService : IMemoryService
 
     public async Task<bool> IsDuplicateAsync(string summary)
     {
-        var vector = await _embeddings.EmbedAsync(summary);
+        float[] vector;
+        try
+        {
+            vector = await _embeddings.EmbedAsync(summary);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            _logger.LogWarning("Embedding service unavailable, skipping duplicate check: {Message}", ex.Message);
+            return false;
+        }
+
         var all = await _db.Memories.Select(m => m.Embedding).ToListAsync();
 
         return all.Any(e => CosineSimilarity(vector, ToFloats(e)) >= DuplicateThreshold);

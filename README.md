@@ -36,7 +36,7 @@ You ──► Claude Desktop
    SQLite DB     Ollama
   (your machine) (your machine)
   preferences    nomic-embed-text
-  memories       qwen3:8b
+  memories       gemma4
   anti-patterns
 ```
 
@@ -158,7 +158,7 @@ The installer checks prerequisites, pulls Ollama models, installs as a Windows S
 
 ```bash
 ollama pull nomic-embed-text
-ollama pull qwen3:8b
+ollama pull gemma4
 ```
 
 ### 2. Clone and build
@@ -245,7 +245,7 @@ Pack content is encrypted, licensed per machine, and decrypted locally. It never
 
 ## How memory works
 
-Every session recorded via `apex_record_message` is processed nightly by the consolidation job (Hangfire + Ollama qwen3:8b). It extracts:
+Every session recorded via `apex_record_message` is processed nightly by the consolidation job (Hangfire + Ollama gemma4). It extracts:
 
 - **Memories** — specific solutions and outcomes, stored as 768-dim embeddings via nomic-embed-text
 - **Preferences** — coding style and tooling preferences with confidence scores that strengthen each time the same pattern recurs

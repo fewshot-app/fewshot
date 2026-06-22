@@ -2,45 +2,45 @@
 @using Apex.Dashboard.Services
 @inject ApexApiClient Api
 
-<h2>Proxy Audit</h2>
-<p>MCP tool traffic intercepted by Apex.Proxy — findings from outbound arguments and inbound results.</p>
+<div class="page-header">
+    <h1 class="page-title">Proxy Audit</h1>
+    <p class="page-subtitle">MCP tool traffic intercepted by Apex.Proxy — findings from outbound arguments and inbound results.</p>
+</div>
 
 @if (_error != null)
 {
-    <div style="background:#fdd;padding:10px;border-radius:4px;margin-bottom:16px">@_error</div>
+    <div class="alert-error">@_error</div>
 }
 
 @if (_stats != null)
 {
-    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px">
-        <div style="flex:1;min-width:140px;background:#f8f9fa;border-radius:8px;padding:16px;text-align:center">
-            <div style="font-size:2em;font-weight:bold">@_stats.Total</div>
-            <div style="color:#666">Total Events</div>
+    <div class="stats-grid" style="margin-bottom:1.5rem">
+        <div class="stat-card">
+            <div class="stat-value">@_stats.Total</div>
+            <div class="stat-label">Total Events</div>
         </div>
-        <div style="flex:1;min-width:140px;background:#fef3f2;border-radius:8px;padding:16px;text-align:center">
-            <div style="font-size:2em;font-weight:bold;color:#dc2626">@_stats.Redacted</div>
-            <div style="color:#666">Redacted</div>
+        <div class="stat-card stat-card-danger">
+            <div class="stat-value" style="color:var(--danger)">@_stats.Redacted</div>
+            <div class="stat-label">Redacted</div>
         </div>
-        <div style="flex:1;min-width:140px;background:#f0fdf4;border-radius:8px;padding:16px;text-align:center">
-            <div style="font-size:2em;font-weight:bold;color:#16a34a">@(_stats.Total - _stats.Redacted)</div>
-            <div style="color:#666">Clean</div>
+        <div class="stat-card stat-card-success">
+            <div class="stat-value" style="color:var(--success)">@(_stats.Total - _stats.Redacted)</div>
+            <div class="stat-label">Clean</div>
         </div>
-        <div style="flex:1;min-width:140px;background:#eff6ff;border-radius:8px;padding:16px;text-align:center">
-            <div style="font-size:2em;font-weight:bold;color:#2563eb">@_stats.LastDay</div>
-            <div style="color:#666">Last 24h</div>
+        <div class="stat-card stat-card-info">
+            <div class="stat-value" style="color:var(--info)">@_stats.LastDay</div>
+            <div class="stat-label">Last 24h</div>
         </div>
     </div>
 
     @if (_stats.TopTypes.Count > 0)
     {
-        <div style="margin-bottom:24px">
-            <h3 style="margin-bottom:8px">Top Finding Types</h3>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="card" style="margin-bottom:1.5rem">
+            <div class="card-title">Top Finding Types</div>
+            <div class="flex gap-1 flex-wrap">
                 @foreach (var t in _stats.TopTypes)
                 {
-                    <span style="background:#e5e7eb;padding:4px 12px;border-radius:16px;font-size:0.9em">
-                        @t.Type <strong>(@t.Count)</strong>
-                    </span>
+                    <span class="badge badge-warning">@t.Type <strong>(@t.Count)</strong></span>
                 }
             </div>
         </div>
@@ -48,86 +48,89 @@
 }
 
 <!-- Filter -->
-<div style="margin-bottom:12px;display:flex;gap:12px;align-items:center">
-    <label>
-        <input type="checkbox" @bind="_redactedOnly" @bind:event="oninput" @onchange="LoadLogsAsync" />
-        Redacted only
-    </label>
-    <button @onclick="LoadLogsAsync" style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
-        Refresh
-    </button>
+<div class="card" style="margin-bottom:1rem">
+    <div class="flex gap-2 items-center">
+        <label class="flex items-center gap-1" style="cursor:pointer">
+            <input type="checkbox" @bind="_redactedOnly" @bind:event="oninput" @onchange="LoadLogsAsync" />
+            <span class="text-sm">Redacted only</span>
+        </label>
+        <button class="btn" @onclick="LoadLogsAsync">Refresh</button>
+    </div>
 </div>
 
 <!-- Logs Table -->
 @if (_loading)
 {
-    <p>Loading...</p>
+    <div class="loading">Loading...</div>
 }
 else if (_logs.Count == 0)
 {
-    <p style="color:#888">No proxy audit events recorded yet. Events appear when Apex.Proxy intercepts MCP tool traffic.</p>
+    <div class="card">
+        <p class="text-muted">No proxy audit events recorded yet. Events appear when Apex.Proxy intercepts MCP tool traffic.</p>
+    </div>
 }
 else
 {
-    <table style="width:100%;border-collapse:collapse;font-size:0.9em">
-        <thead>
-            <tr style="border-bottom:2px solid #e5e7eb;text-align:left">
-                <th style="padding:8px">Time</th>
-                <th style="padding:8px">Dir</th>
-                <th style="padding:8px">Method</th>
-                <th style="padding:8px">Findings</th>
-                <th style="padding:8px">Types</th>
-                <th style="padding:8px">Confidence</th>
-                <th style="padding:8px">Redacted</th>
-                <th style="padding:8px">Source</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var log in _logs)
-            {
-                <tr style="border-bottom:1px solid #f3f4f6;background:@(log.WasRedacted ? "#fef3f2" : "transparent")">
-                    <td style="padding:6px 8px;white-space:nowrap">@log.Timestamp.ToLocalTime().ToString("MM/dd HH:mm:ss")</td>
-                    <td style="padding:6px 8px">
-                        <span style="background:@(log.Direction == "outbound" ? "#dbeafe" : "#f3e8ff");padding:2px 8px;border-radius:4px;font-size:0.85em">
-                            @log.Direction
-                        </span>
-                    </td>
-                    <td style="padding:6px 8px;font-family:monospace;font-size:0.85em">@log.Method</td>
-                    <td style="padding:6px 8px;text-align:center">@log.FindingCount</td>
-                    <td style="padding:6px 8px">
-                        @foreach (var type in log.FindingTypes.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            <span style="background:@GetTypeColor(type);padding:1px 6px;border-radius:4px;font-size:0.8em;margin-right:4px">
-                                @type.Trim()
-                            </span>
-                        }
-                    </td>
-                    <td style="padding:6px 8px">@log.MaxConfidence.ToString("F2")</td>
-                    <td style="padding:6px 8px;text-align:center">
-                        @if (log.WasRedacted)
-                        {
-                            <span style="color:#dc2626;font-weight:bold">YES</span>
-                        }
-                    </td>
-                    <td style="padding:6px 8px;font-size:0.85em;color:#888">@log.Source</td>
+    <div class="card" style="padding:0;overflow:hidden">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Dir</th>
+                    <th>Method</th>
+                    <th>Findings</th>
+                    <th>Types</th>
+                    <th>Confidence</th>
+                    <th>Redacted</th>
+                    <th>Source</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var log in _logs)
+                {
+                    <tr class="@(log.WasRedacted ? "row-redacted" : "")">
+                        <td class="text-sm text-muted" style="white-space:nowrap">@log.Timestamp.ToLocalTime().ToString("MM/dd HH:mm:ss")</td>
+                        <td>
+                            <span class="badge @(log.Direction == "outbound" ? "badge-info" : "badge-purple")">
+                                @log.Direction
+                            </span>
+                        </td>
+                        <td style="font-family:monospace;font-size:0.85em">@log.Method</td>
+                        <td style="text-align:center">@log.FindingCount</td>
+                        <td>
+                            @foreach (var type in log.FindingTypes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <span class="badge @GetTypeBadgeClass(type)" style="margin-right:4px">@type.Trim()</span>
+                            }
+                        </td>
+                        <td>@log.MaxConfidence.ToString("F2")</td>
+                        <td style="text-align:center">
+                            @if (log.WasRedacted)
+                            {
+                                <span class="badge badge-danger">YES</span>
+                            }
+                        </td>
+                        <td class="text-sm text-muted">@log.Source</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 
     <!-- Pagination -->
-    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-        <button @onclick="PrevPage" disabled="@(_page <= 1)"
-                style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
-            Prev
-        </button>
-        <span>Page @_page of @_totalPages (@_total events)</span>
-        <button @onclick="NextPage" disabled="@(_page >= _totalPages)"
-                style="padding:4px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer">
-            Next
-        </button>
+    <div class="flex gap-1 items-center" style="margin-top:1rem">
+        <button class="btn" @onclick="PrevPage" disabled="@(_page <= 1)">Prev</button>
+        <span class="text-sm text-muted">Page @_page of @_totalPages (@_total events)</span>
+        <button class="btn" @onclick="NextPage" disabled="@(_page >= _totalPages)">Next</button>
     </div>
 }
+
+<style>
+    .row-redacted { background: rgba(220, 38, 38, 0.06); }
+    .stat-card-danger { border-top: 3px solid var(--danger); }
+    .stat-card-success { border-top: 3px solid var(--success); }
+    .stat-card-info { border-top: 3px solid var(--info); }
+</style>
 
 @code {
     private List<ProxyAuditLogDto> _logs = [];
@@ -170,15 +173,12 @@ else
     private async Task PrevPage() { if (_page > 1) { _page--; await LoadLogsAsync(); } }
     private async Task NextPage() { if (_page < _totalPages) { _page++; await LoadLogsAsync(); } }
 
-    private static string GetTypeColor(string type) => type.Trim() switch
+    private static string GetTypeBadgeClass(string type) => type.Trim() switch
     {
-        "SSN" => "#fee2e2",
-        "ConnectionString" => "#fef9c3",
-        "BearerToken" or "JwtToken" => "#fce7f3",
-        "PrivateKey" => "#fee2e2",
-        "CreditCard" => "#fee2e2",
-        "HighEntropySecret" => "#f3e8ff",
-        "GitHubToken" or "AWSKey" => "#fef9c3",
-        _ => "#f3f4f6"
+        "SSN" or "CreditCard" or "PrivateKey" => "badge-danger",
+        "ConnectionString" or "GitHubToken" or "AWSKey" => "badge-warning",
+        "BearerToken" or "JwtToken" => "badge-warning",
+        "HighEntropySecret" => "badge-purple",
+        _ => ""
     };
 }

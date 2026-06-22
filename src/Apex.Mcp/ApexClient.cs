@@ -24,7 +24,8 @@ public class ApexClient
         var resp = await Http.PostAsJsonAsync("/api/projects/resolve", new { hint });
         if (!resp.IsSuccessStatusCode) return "general";
         var raw = await resp.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<string>(raw, _json) ?? "general";
+        var trimmed = raw.Trim('"', ' ', '\t', '\r', '\n');
+        return string.IsNullOrEmpty(trimmed) ? "general" : trimmed;
     }
 
     public async Task<List<ProjectDto>> GetProjectsAsync()
@@ -43,10 +44,41 @@ public class ApexClient
             facts = (string?)null,
             isActive = true
         });
-        if (!resp.IsSuccessStatusCode) return $"Failed to add project: {resp.StatusCode}";
-        var p = await resp.Content.ReadFromJsonAsync<ProjectDto>(_json);
-        return p is null ? "Created but could not read response" : $"Created project '{p.Name}' (ID {p.ProjectId})";
+        var body = await resp.Content.ReadAsStringAsync();
+        if (!resp.IsSuccessStatusCode) return $"Failed to add project ({resp.StatusCode}): {body}";
+        try
+        {
+            var p = JsonSerializer.Deserialize<ProjectDto>(body, _json);
+            return p is null ? "Created but could not read response" : $"Created project '{p.Name}' (ID {p.ProjectId})";
+        }
+        catch (Exception ex)
+        {
+            return $"Project created but response parse failed: {ex.Message}. Raw: {body[..Math.Min(200, body.Length)]}";
+        }
     }
+
+    public async Task<string> UpdateProjectAsync(string name, string? displayName, string? keywords, string? facts, bool? isActive)
+    {
+        var key = name.ToLowerInvariant().Trim();
+        var projects = await GetProjectsAsync();
+        var existing = projects.FirstOrDefault(p => p.Name == key);
+        if (existing is null) return $"Project '{key}' not found.";
+
+        var resp = await Http.PutAsJsonAsync($"/api/projects/{existing.ProjectId}", new
+        {
+            name = existing.Name,
+            displayName = displayName ?? existing.DisplayName,
+            keywords = keywords ?? existing.Keywords,
+            facts = facts ?? existing.Facts,
+            isActive = isActive ?? existing.IsActive
+        });
+        if (!resp.IsSuccessStatusCode) return $"Failed to update project: {resp.StatusCode}";
+        var p = await resp.Content.ReadFromJsonAsync<ProjectDto>(_json);
+        return p is null
+            ? $"Updated project '{key}' but could not read response."
+            : $"Updated project '{p.Name}' (ID {p.ProjectId}). Keywords: {p.Keywords}";
+    }
+
 
     public async Task<string> RemoveProjectAsync(string name)
     {
@@ -70,7 +102,17 @@ public class ApexClient
 
     public async Task CloseSessionAsync(string project)
     {
-        await Http.PostAsJsonAsync("/api/projects/session/close", new { project });
+        var resp = await Http.PostAsJsonAsync("/api/projects/session/close", new { project });
+        resp.EnsureSuccessStatusCode();
+    }
+
+    public async Task<string> TriggerConsolidationAsync()
+    {
+        var resp = await Http.PostAsync("/api/consolidation/run-all", null);
+        if (!resp.IsSuccessStatusCode)
+            return $"Failed to trigger consolidation: {resp.StatusCode}";
+        var result = await resp.Content.ReadAsStringAsync();
+        return result;
     }
 
     // ── Context ───────────────────────────────────────────────────────────────
@@ -103,7 +145,8 @@ public class ApexClient
 
     public async Task RecordMessageAsync(int sessionId, string role, string content)
     {
-        await Http.PostAsJsonAsync("/api/messages", new { sessionId, role, content });
+        var resp = await Http.PostAsJsonAsync("/api/messages", new { sessionId, role, content });
+        resp.EnsureSuccessStatusCode();
     }
 
     // ── Audit / Scan ──────────────────────────────────────────────────────────
@@ -112,11 +155,11 @@ public class ApexClient
     {
         var resp = await Http.PostAsJsonAsync("/api/audit/analyze", new { content, sessionId = (int?)null });
         if (!resp.IsSuccessStatusCode)
-            return new ScanResult(true, false, "Scan unavailable — APEX API returned " + resp.StatusCode, []);
+            return new ScanResult(true, false, null, []);
 
         var result = await resp.Content.ReadFromJsonAsync<AuditResponse>(_json);
         if (result is null)
-            return new ScanResult(true, false, "Scan returned empty response.", []);
+            return new ScanResult(true, false, null, []);
 
         return new ScanResult(result.IsSafe, result.RequiresReview, result.RedactedContent, result.Findings);
     }
@@ -137,7 +180,7 @@ public class ApexClient
 }
 
 // DTOs
-public record ProjectDto(int ProjectId, string Name, string DisplayName, string Keywords);
+public record ProjectDto(int ProjectId, string Name, string DisplayName, string Keywords, string? Facts = null, bool IsActive = true);
 public record ProjectSessionDto(int SessionId, bool IsNew, string Project);
 public record ContextResult(string AssembledContext, int TotalTokens);
 public record MemoryResult(string Summary, string? Solution, string? Tags, double RelevanceScore);

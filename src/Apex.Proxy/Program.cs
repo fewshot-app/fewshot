@@ -102,7 +102,7 @@ if (string.IsNullOrEmpty(serverExe))
     return 1;
 }
 
-var apexApiBase = Environment.GetEnvironmentVariable("APEX_API_URL") ?? "http://127.0.0.1:5000";
+var apexApiBase = Environment.GetEnvironmentVariable("APEX_API_URL") ?? "http://localhost:5000";
 Console.Error.WriteLine($"[APEX-PROXY] Starting. Server: {serverExe}. APEX: {apexApiBase}");
 
 // ── Spawn the real MCP server ─────────────────────────────────────────────────

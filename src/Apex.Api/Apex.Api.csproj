@@ -18,6 +18,20 @@
   <ItemGroup>
     <ProjectReference Include="..\Apex.Core\Apex.Core.csproj" />
     <ProjectReference Include="..\Apex.Infrastructure\Apex.Infrastructure.csproj" />
+    <ProjectReference Include="..\Apex.Dashboard\Apex.Dashboard.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="CopyDashboardWwwroot" AfterTargets="Build">
+    <ItemGroup>
+      <DashboardBuildFiles Include="$(MSBuildThisFileDirectory)..\Apex.Dashboard\bin\$(Configuration)\net8.0\wwwroot\**\*" />
+      <DashboardSourceFiles Include="$(MSBuildThisFileDirectory)..\Apex.Dashboard\wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DashboardBuildFiles)"
+          DestinationFiles="@(DashboardBuildFiles->'$(OutputPath)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(DashboardSourceFiles)"
+          DestinationFiles="@(DashboardSourceFiles->'$(OutputPath)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

@@ -51,4 +51,19 @@ public class SessionsController : ControllerBase
         var session = await _sessions.GetActiveSessionAsync();
         return session is null ? NotFound() : Ok(session);
     }
+
+    [HttpPatch("{id}")]
+    public async Task<ActionResult<Session>> Patch(int id, [FromBody] SessionPatchRequest req)
+    {
+        var session = await _sessions.GetSessionAsync(id);
+        if (session is null) return NotFound();
+
+        if (req.Project is not null) session.Project = req.Project;
+        if (req.EndTime.HasValue) session.EndTime = req.EndTime.Value;
+        if (req.ClearError) session.ConsolidationError = null;
+        await _sessions.UpdateSessionAsync(session);
+        return Ok(session);
+    }
 }
+
+public record SessionPatchRequest(string? Project = null, DateTime? EndTime = null, bool ClearError = false);

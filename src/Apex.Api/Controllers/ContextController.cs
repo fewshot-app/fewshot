@@ -30,8 +30,15 @@ public class ContextController : ControllerBase
     [HttpPost("auto")]
     public async Task<ActionResult<ContextInjectionResult>> Auto([FromBody] AutoContextRequest req)
     {
-        var result = await _injector.BuildContextAutoAsync(req.SessionId, req.State, req.Facts);
-        return Ok(result);
+        try
+        {
+            var result = await _injector.BuildContextAutoAsync(req.SessionId, req.State, req.Facts);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace, inner = ex.InnerException?.Message });
+        }
     }
 
     /// <summary>

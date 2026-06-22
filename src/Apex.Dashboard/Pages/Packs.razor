@@ -2,28 +2,29 @@
 @using Apex.Dashboard.Services
 @inject ApexApiClient Api
 
-<h2>Packs</h2>
-<p>Export project knowledge or import packs to bootstrap APEX with curated data.</p>
+<div class="page-header">
+    <h1 class="page-title">Packs</h1>
+    <p class="page-subtitle">Export project knowledge or import packs to bootstrap APEX with curated data.</p>
+</div>
 
 @if (_error != null)
 {
-    <div style="background:#fdd;padding:10px;border-radius:4px;margin-bottom:16px">@_error</div>
+    <div class="alert-error">@_error</div>
 }
-
 @if (_success != null)
 {
-    <div style="background:#dfd;padding:10px;border-radius:4px;margin-bottom:16px">@_success</div>
+    <div class="alert-success">@_success</div>
 }
 
-<div style="display:flex;gap:32px;flex-wrap:wrap">
+<div class="packs-grid">
 
     <!-- Export Panel -->
-    <div style="flex:1;min-width:350px;border:1px solid #ddd;border-radius:8px;padding:16px">
-        <h3>Export</h3>
-        <p>Export a project's memories, preferences, and anti-patterns as a pack.</p>
+    <div class="card">
+        <div class="card-title">Export</div>
+        <p class="text-sm text-muted" style="margin-bottom:1rem">Export a project's memories, preferences, and anti-patterns as a pack.</p>
 
-        <label><strong>Project</strong></label><br/>
-        <select @bind="_exportProject" style="width:100%;padding:6px;margin:4px 0 12px">
+        <label class="field-label">Project</label>
+        <select @bind="_exportProject" class="select-input">
             <option value="">— Select project —</option>
             @foreach (var p in _projects)
             {
@@ -31,37 +32,33 @@
             }
         </select>
 
-        <button @onclick="ExportAsync" disabled="@(string.IsNullOrEmpty(_exportProject) || _loading)"
-                style="padding:8px 20px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer">
+        <button @onclick="ExportAsync" disabled="@(string.IsNullOrEmpty(_exportProject) || _loading)" class="btn btn-primary">
             @(_loading ? "Exporting..." : "Export Pack")
         </button>
 
         @if (_exportedJson != null)
         {
-            <div style="margin-top:12px">
-                <label><strong>Pack JSON</strong> <small>(copy or download)</small></label><br/>
-                <textarea readonly style="width:100%;height:200px;font-family:monospace;font-size:12px;padding:8px;margin-top:4px">@_exportedJson</textarea>
-                <br/>
-                <button @onclick="CopyExportToClipboard" style="margin-top:4px;padding:4px 12px">Copy</button>
+            <div style="margin-top:1rem">
+                <label class="field-label">Pack JSON <span class="text-muted" style="font-weight:400">(copy or download)</span></label>
+                <textarea readonly class="code-area" style="height:200px">@_exportedJson</textarea>
+                <button @onclick="CopyExportToClipboard" class="btn" style="margin-top:0.5rem">Copy</button>
             </div>
         }
     </div>
 
     <!-- Import Panel -->
-    <div style="flex:1;min-width:350px;border:1px solid #ddd;border-radius:8px;padding:16px">
-        <h3>Import</h3>
-        <p>Paste pack JSON to import memories, preferences, and anti-patterns.</p>
+    <div class="card">
+        <div class="card-title">Import</div>
+        <p class="text-sm text-muted" style="margin-bottom:1rem">Paste pack JSON to import memories, preferences, and anti-patterns.</p>
 
-        <label><strong>Pack JSON</strong></label><br/>
-        <textarea @bind="_importJson" placeholder="Paste pack JSON here..."
-                  style="width:100%;height:120px;font-family:monospace;font-size:12px;padding:8px;margin:4px 0"></textarea>
+        <label class="field-label">Pack JSON</label>
+        <textarea @bind="_importJson" placeholder="Paste pack JSON here..." class="code-area" style="height:120px"></textarea>
 
-        <label><strong>Decryption Key</strong> <small>(optional, for encrypted packs)</small></label><br/>
-        <input @bind="_decryptionKey" type="text" placeholder="Base64 key..."
-               style="width:100%;padding:6px;margin:4px 0 8px;font-family:monospace" />
+        <label class="field-label">Decryption Key <span class="text-muted" style="font-weight:400">(optional, for encrypted packs)</span></label>
+        <input @bind="_decryptionKey" type="text" placeholder="Base64 key..." class="search-input" style="font-family:monospace;margin-bottom:0.75rem" />
 
-        <label><strong>Target Project Override</strong> <small>(optional)</small></label><br/>
-        <select @bind="_importTargetProject" style="width:100%;padding:6px;margin:4px 0 12px">
+        <label class="field-label">Target Project Override <span class="text-muted" style="font-weight:400">(optional)</span></label>
+        <select @bind="_importTargetProject" class="select-input">
             <option value="">— Use pack default —</option>
             @foreach (var p in _projects)
             {
@@ -69,43 +66,41 @@
             }
         </select>
 
-        <div style="display:flex;gap:8px">
-            <button @onclick="ValidateAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)"
-                    style="padding:8px 16px;background:#6b7280;color:white;border:none;border-radius:4px;cursor:pointer">
+        <div class="flex gap-1">
+            <button @onclick="ValidateAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)" class="btn">
                 Validate
             </button>
-            <button @onclick="ImportAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)"
-                    style="padding:8px 20px;background:#059669;color:white;border:none;border-radius:4px;cursor:pointer">
+            <button @onclick="ImportAsync" disabled="@(string.IsNullOrEmpty(_importJson) || _loading)" class="btn btn-success">
                 @(_loading ? "Importing..." : "Import Pack")
             </button>
         </div>
 
         @if (_validationResult != null)
         {
-            <div style="margin-top:12px;padding:10px;background:@(_validationResult.IsValid ? "#dfd" : "#fdd");border-radius:4px">
+            <div class="@(_validationResult.IsValid ? "alert-success" : "alert-error")" style="margin-top:0.75rem">
                 @if (_validationResult.IsValid)
                 {
-                    <p style="margin:0"><strong>Valid:</strong> @_validationResult.PackName (@_validationResult.PackId)</p>
-                    <p style="margin:2px 0 0;font-size:0.85em">@_validationResult.MemoryCount memories, @_validationResult.PreferenceCount preferences, @_validationResult.AntiPatternCount anti-patterns</p>
+                    <div><strong>Valid:</strong> @_validationResult.PackName (@_validationResult.PackId)</div>
+                    <div class="text-sm">@_validationResult.MemoryCount memories, @_validationResult.PreferenceCount preferences, @_validationResult.AntiPatternCount anti-patterns</div>
                 }
                 else
                 {
-                    <p style="margin:0"><strong>Invalid:</strong> @_validationResult.Error</p>
+                    <div><strong>Invalid:</strong> @_validationResult.Error</div>
                 }
             </div>
         }
 
         @if (_importResult != null)
         {
-            <div style="margin-top:12px;padding:10px;background:@(_importResult.Success ? "#dfd" : "#fdd");border-radius:4px">
+            <div class="@(_importResult.Success ? "alert-success" : "alert-error")" style="margin-top:0.75rem">
                 @if (_importResult.Success)
                 {
-                    <p style="margin:0"><strong>Imported:</strong> @_importResult.PackName</p>
-                    <p style="margin:2px 0 0;font-size:0.85em">@_importResult.MemoriesImported memories, @_importResult.PreferencesImported preferences, @_importResult.AntiPatternsImported anti-patterns, @_importResult.DuplicatesSkipped skipped</p>
+                    <div><strong>Imported:</strong> @_importResult.PackName</div>
+                    <div class="text-sm">@_importResult.MemoriesImported memories, @_importResult.PreferencesImported preferences, @_importResult.AntiPatternsImported anti-patterns, @_importResult.DuplicatesSkipped skipped</div>
                 }
                 else
                 {
-                    <p style="margin:0"><strong>Failed:</strong> @_importResult.Error</p>
+                    <div><strong>Failed:</strong> @_importResult.Error</div>
                 }
             </div>
         }
@@ -114,10 +109,23 @@
 </div>
 
 <!-- Machine Info -->
-<div style="margin-top:24px;border:1px solid #ddd;border-radius:8px;padding:16px">
-    <h3>Machine Info</h3>
-    <p><strong>Machine ID:</strong> <code>@(_machineId ?? "loading...")</code></p>
+<div class="card">
+    <div class="card-title">Machine Info</div>
+    <p class="text-sm"><strong>Machine ID:</strong> <code class="inline-code">@(_machineId ?? "loading...")</code></p>
 </div>
+
+<style>
+    .packs-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    @@media (max-width: 768px) {
+        .packs-grid { grid-template-columns: 1fr; }
+    }
+</style>
 
 @code {
     private List<ProjectDto> _projects = [];
@@ -125,18 +133,15 @@
     private string? _success;
     private bool _loading;
 
-    // Export
     private string _exportProject = "";
     private string? _exportedJson;
 
-    // Import
     private string _importJson = "";
     private string _decryptionKey = "";
     private string _importTargetProject = "";
     private PackValidationResultDto? _validationResult;
     private PackImportResultDto? _importResult;
 
-    // Info
     private string? _machineId;
 
     protected override async Task OnInitializedAsync()
@@ -192,8 +197,6 @@
 
     private void CopyExportToClipboard()
     {
-        // Blazor WASM can't directly access clipboard without JS interop
-        // The textarea is selectable, user can Ctrl+A, Ctrl+C
         _success = "Select the text in the box and copy with Ctrl+C";
     }
 }

@@ -17,13 +17,20 @@ public class ApexTools
         [Description("A short description of what you're working on, e.g. 'wordpress divi modules', 'apex mcp integration', 'peakhealth pdf generation'")]
         string hint = "general")
     {
-        var project = await _apex.ResolveProjectAsync(hint);
-        var session = await _apex.GetOrCreateSessionAsync(project);
-        var context = await _apex.GetContextAsync(session.SessionId, project, hint);
-        var header = session.IsNew
-            ? $"[APEX] New session #{session.SessionId} — Project: {project}"
-            : $"[APEX] Resuming session #{session.SessionId} — Project: {project}";
-        return $"{header}\n\n{context}";
+        try
+        {
+            var project = await _apex.ResolveProjectAsync(hint);
+            var session = await _apex.GetOrCreateSessionAsync(project);
+            var context = await _apex.GetContextAsync(session.SessionId, project, hint);
+            var header = session.IsNew
+                ? $"[APEX] New session #{session.SessionId} — Project: {project}"
+                : $"[APEX] Resuming session #{session.SessionId} — Project: {project}";
+            return $"{header}\n\n{context}";
+        }
+        catch (Exception ex)
+        {
+            return $"[APEX ERROR] {ex.GetType().Name}: {ex.Message}\n{ex.InnerException?.Message}";
+        }
     }
 
     [McpServerTool, Description(
@@ -37,9 +44,16 @@ public class ApexTools
         [Description("The message content to record")]
         string content)
     {
-        var session = await _apex.GetOrCreateSessionAsync(project);
-        await _apex.RecordMessageAsync(session.SessionId, role, content);
-        return $"[APEX] Recorded {role} message to session #{session.SessionId}";
+        try
+        {
+            var session = await _apex.GetOrCreateSessionAsync(project);
+            await _apex.RecordMessageAsync(session.SessionId, role, content);
+            return $"[APEX] Recorded {role} message to session #{session.SessionId}";
+        }
+        catch (Exception ex)
+        {
+            return $"[APEX ERROR] Failed to record message: {ex.GetType().Name}: {ex.Message}";
+        }
     }
 
     [McpServerTool, Description(
@@ -62,8 +76,16 @@ public class ApexTools
         [Description("Project name to close the session for")]
         string project)
     {
-        await _apex.CloseSessionAsync(project);
-        return $"[APEX] Session closed for '{project}'. Consolidation queued for tonight.";
+        try
+        {
+            await _apex.CloseSessionAsync(project);
+            var result = await _apex.TriggerConsolidationAsync();
+            return $"[APEX] Session closed for '{project}'. Consolidation triggered.\n{result}";
+        }
+        catch (Exception ex)
+        {
+            return $"[APEX ERROR] {ex.GetType().Name}: {ex.Message}";
+        }
     }
 
     [McpServerTool, Description(
@@ -89,6 +111,43 @@ public class ApexTools
         string keywords)
     {
         return await _apex.AddProjectAsync(name, display_name, keywords);
+    }
+
+    [McpServerTool, Description(
+        "Edits an existing project. " +
+        "All fields except 'name' are optional — pass only the fields you want to change. " +
+        "Useful for adding keywords to an existing project without re-typing them all. " +
+        "To activate/deactivate a project, use apex_activate_project or apex_deactivate_project instead.")]
+    public async Task<string> apex_edit_project(
+        [Description("Exact project name to edit, e.g. 'connectapps'. Use apex_list_projects to confirm.")]
+        string name,
+        [Description("New human-readable display name. Omit to keep current.")]
+        string? display_name = null,
+        [Description("New comma-separated keywords. REPLACES existing keywords entirely. Omit to keep current.")]
+        string? keywords = null,
+        [Description("New free-form facts/notes about the project. Omit to keep current.")]
+        string? facts = null)
+    {
+        return await _apex.UpdateProjectAsync(name, display_name, keywords, facts, null);
+    }
+
+    [McpServerTool, Description(
+        "Activates a project so it participates in keyword auto-routing and context injection.")]
+    public async Task<string> apex_activate_project(
+        [Description("Exact project name to activate, e.g. 'connectapps'. Use apex_list_projects to confirm.")]
+        string name)
+    {
+        return await _apex.UpdateProjectAsync(name, null, null, null, true);
+    }
+
+    [McpServerTool, Description(
+        "Deactivates a project so it stops participating in keyword auto-routing and context injection. " +
+        "Does not delete the project, its sessions, or its memories.")]
+    public async Task<string> apex_deactivate_project(
+        [Description("Exact project name to deactivate, e.g. 'connectapps'. Use apex_list_projects to confirm.")]
+        string name)
+    {
+        return await _apex.UpdateProjectAsync(name, null, null, null, false);
     }
 
     [McpServerTool, Description(

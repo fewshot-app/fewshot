@@ -19,7 +19,7 @@ public class MessageService : IMessageService
             SessionId = sessionId,
             Role = role,
             Content = content,
-            Timestamp = DateTime.Now,
+            Timestamp = DateTime.UtcNow,
             TokenCount = tokenCount
         };
         _db.Messages.Add(msg);
@@ -37,15 +37,6 @@ public class MessageService : IMessageService
 
     public async Task<int> GetCorrectionCountAsync(int sessionId)
     {
-        var patterns = new[]
-        {
-            "%that's not%", "%that is not%", "%no, %wrong%", "%incorrect%",
-            "%I already told%", "%I already said%", "%as I mentioned%",
-            "%let me re-explain%", "%let me reexplain%", "%let me clarify%"
-        };
-
-        // EF Core doesn't support LIKE with multiple patterns well in LINQ,
-        // so we use raw SQL for this specific query
         return await _db.Database
             .SqlQueryRaw<int>(
                 """
@@ -72,7 +63,7 @@ public class MessageService : IMessageService
                     FROM Messages
                     WHERE SessionId = {0} AND Role = 'User'
                 ) ranked
-                WHERE MsgNum <= 3 AND LEN(Content) > 500
+                WHERE MsgNum <= 3 AND LENGTH(Content) > 500
                 """, sessionId)
             .SingleAsync();
     }

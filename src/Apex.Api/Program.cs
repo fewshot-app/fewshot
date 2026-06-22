@@ -8,6 +8,7 @@ using Apex.Infrastructure.Experiments;
 using Apex.Infrastructure.Memory;
 using Apex.Infrastructure.Packs;
 using Apex.Infrastructure.Services;
+using Apex.Api.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,8 +21,10 @@ builder.Host.UseWindowsService();
 // ── SQLite connection string (expands %APPDATA%) ─────────────────
 var rawConn = builder.Configuration.GetConnectionString("ApexDb")
     ?? "Data Source=%APPDATA%\\APEX\\apex.db";
-var sqliteConn = rawConn.Replace("%APPDATA%",
-    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+var sqliteConn = rawConn
+    .Replace("%APPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
+    .Replace("%LOCALAPPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))
+    .Replace("%PROGRAMDATA%", Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
 
 // Ensure data directory exists
 var dbPath = sqliteConn.Replace("Data Source=", "").Trim();
@@ -54,13 +57,17 @@ builder.Services.AddTransient<IContextInjector, ContextInjector>();
 // ── Experiments ───────────────────────────────────────────────────
 builder.Services.AddTransient<IExperimentService, ExperimentService>();
 
+// ── Presidio process manager ──────────────────────────────────────
+builder.Services.AddSingleton<PresidioProcessManager>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PresidioProcessManager>());
+
 // ── In-process cache + task queue (no Redis) ──────────────────────
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ITaskQueue, InMemoryTaskQueue>();
 builder.Services.AddTransient<IProjectSessionService, ProjectSessionService>();
 
 // ── Ollama HTTP client ────────────────────────────────────────────
-var ollamaUrl = builder.Configuration["Apex:Ollama:BaseUrl"] ?? "http://127.0.0.1:11434";
+var ollamaUrl = builder.Configuration["Apex:Ollama:BaseUrl"] ?? "http://localhost:11434";
 builder.Services.AddHttpClient("Ollama", client =>
 {
     client.BaseAddress = new Uri(ollamaUrl);
@@ -76,7 +83,7 @@ builder.Services.AddTransient<PackImportService>();
 builder.Services.AddTransient<PackExportService>();
 builder.Services.AddTransient<ILlmService, LlmService>();
 
-// ── Hangfire (in-memory — jobs survive restarts via SQLite sessions) ──
+// ── Hangfire (in-memory — recurring jobs re-registered on startup) ──
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -88,7 +95,7 @@ builder.Services.AddHangfireServer();
 builder.Services.AddSignalR();
 
 // ── Presidio HTTP client (optional sidecar) ───────────────────────
-var presidioUrl = builder.Configuration["Apex:Presidio:BaseUrl"] ?? "http://127.0.0.1:3000";
+var presidioUrl = builder.Configuration["Apex:Presidio:BaseUrl"] ?? "http://localhost:3000";
 builder.Services.AddHttpClient("Presidio", client =>
 {
     client.BaseAddress = new Uri(presidioUrl);
@@ -137,6 +144,8 @@ if (app.Environment.IsDevelopment() ||
     app.UseSwaggerUI();
 }
 
+if (app.Environment.IsDevelopment())
+    app.UseDeveloperExceptionPage();
 app.UseCors("Dashboard");
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -146,16 +155,19 @@ app.UseStaticFiles(new StaticFileOptions
 if (app.Environment.IsDevelopment() ||
     builder.Configuration.GetValue<bool>("Apex:EnableHangfire"))
 {
-    app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [] });
+    app.UseHangfireDashboard("/hangfire");
 }
 app.MapControllers();
 app.MapHub<ApexHub>("/hubs/apex");
 
-// SPA fallback ΓÇö skip paths handled by middleware (Swagger, Hangfire)
+// SPA fallback ΓÇö skip API/hub/health routes and middleware paths
 app.MapFallback(async context =>
 {
     var path = context.Request.Path.Value ?? "";
-    if (path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
+    if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/health", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/hangfire", StringComparison.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = 404;

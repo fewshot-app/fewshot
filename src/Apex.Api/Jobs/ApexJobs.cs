@@ -76,6 +76,11 @@ public class ConsolidationJob
     public async Task RunAsync()
     {
         _logger.LogInformation("Starting nightly consolidation");
+
+        var closed = await _sessions.CloseStaleActiveSessionsAsync(TimeSpan.FromHours(12));
+        if (closed > 0)
+            _logger.LogInformation("Auto-closed {Count} stale active session(s)", closed);
+
         var unconsolidated = await _sessions.GetUnconsolidatedSessionsAsync();
         _logger.LogInformation("Found {Count} unconsolidated sessions", unconsolidated.Count);
 
@@ -139,7 +144,7 @@ public class ConsolidationJob
             return;
         }
 
-        // Step 4: Store extracted memories in Qdrant
+        // Step 4: Store extracted memories (local vector store)
         var memoriesStored = 0;
         foreach (var mem in extraction.Memories)
         {

@@ -24,7 +24,7 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 | Cache | `IMemoryCache` | In-process, replaces Redis |
 | Queue | `Channel<T>` | In-process, replaces Redis BLPOP |
 | Embeddings | Ollama nomic-embed-text | 768-dim, port 11434 |
-| Summarization | Ollama qwen3:8b | ~5GB, nightly consolidation |
+| Summarization | Ollama gemma4 | ~9.6GB, nightly consolidation |
 | PII Detection | Regex + Shannon entropy (built-in) | Always on. Presidio optional sidecar (port 3000) |
 | Background Jobs | Hangfire InMemory | No SQL Server dependency |
 | Real-time | SignalR | /hubs/apex |

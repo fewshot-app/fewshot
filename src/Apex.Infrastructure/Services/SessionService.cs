@@ -13,7 +13,7 @@ public class SessionService : ISessionService
 
     public async Task<Session> StartSessionAsync()
     {
-        var session = new Session { StartTime = DateTime.Now };
+        var session = new Session { StartTime = DateTime.UtcNow };
         _db.Sessions.Add(session);
         await _db.SaveChangesAsync();
         return session;
@@ -23,7 +23,37 @@ public class SessionService : ISessionService
     {
         await _db.Sessions
             .Where(s => s.SessionId == sessionId)
-            .ExecuteUpdateAsync(x => x.SetProperty(s => s.EndTime, DateTime.Now));
+            .ExecuteUpdateAsync(x => x.SetProperty(s => s.EndTime, DateTime.UtcNow));
+    }
+
+    public async Task<int> CloseStaleActiveSessionsAsync(TimeSpan idleThreshold)
+    {
+        var cutoff = DateTime.UtcNow - idleThreshold;
+
+        var candidates = await _db.Sessions
+            .Where(s => s.EndTime == null)
+            .Select(s => new
+            {
+                s.SessionId,
+                s.StartTime,
+                LastMessage = _db.Messages
+                    .Where(m => m.SessionId == s.SessionId)
+                    .Max(m => (DateTime?)m.Timestamp)
+            })
+            .ToListAsync();
+
+        var staleIds = candidates
+            .Where(c => (c.LastMessage ?? c.StartTime) <= cutoff)
+            .Select(c => c.SessionId)
+            .ToList();
+
+        if (staleIds.Count == 0) return 0;
+
+        await _db.Sessions
+            .Where(s => staleIds.Contains(s.SessionId))
+            .ExecuteUpdateAsync(x => x.SetProperty(s => s.EndTime, DateTime.UtcNow));
+
+        return staleIds.Count;
     }
 
     public async Task<Session?> GetSessionAsync(int sessionId)
@@ -47,7 +77,7 @@ public class SessionService : ISessionService
     public async Task<List<Session>> GetUnconsolidatedSessionsAsync()
     {
         return await _db.Sessions
-            .Where(s => s.EndTime != null && !s.IsConsolidated && s.ConsolidationError == null)
+            .Where(s => s.EndTime != null && !s.IsConsolidated)
             .OrderBy(s => s.StartTime)
             .ToListAsync();
     }
@@ -58,8 +88,9 @@ public class SessionService : ISessionService
             .Where(s => s.SessionId == sessionId)
             .ExecuteUpdateAsync(x => x
                 .SetProperty(s => s.IsConsolidated, true)
-                .SetProperty(s => s.ConsolidatedAt, DateTime.Now)
-                .SetProperty(s => s.ConsolidationSummary, summary));
+                .SetProperty(s => s.ConsolidatedAt, DateTime.UtcNow)
+                .SetProperty(s => s.ConsolidationSummary, summary)
+                .SetProperty(s => s.ConsolidationError, (string?)null));
     }
 
     public async Task MarkConsolidationFailedAsync(int sessionId, string error)
@@ -67,5 +98,11 @@ public class SessionService : ISessionService
         await _db.Sessions
             .Where(s => s.SessionId == sessionId)
             .ExecuteUpdateAsync(x => x.SetProperty(s => s.ConsolidationError, error));
+    }
+
+    public async Task UpdateSessionAsync(Session session)
+    {
+        _db.Sessions.Update(session);
+        await _db.SaveChangesAsync();
     }
 }

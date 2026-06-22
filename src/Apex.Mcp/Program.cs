@@ -13,11 +13,11 @@ var host = Host.CreateDefaultBuilder(args)
     {
         logging.ClearProviders();
         logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-        logging.SetMinimumLevel(LogLevel.Warning);
+        logging.SetMinimumLevel(LogLevel.Debug);
     })
     .ConfigureServices((ctx, services) =>
     {
-        var apexBase = ctx.Configuration["Apex:ApiBaseUrl"] ?? "http://127.0.0.1:5000";
+        var apexBase = ctx.Configuration["Apex:ApiBaseUrl"] ?? "http://localhost:5000";
         services.AddHttpClient("Apex", c =>
         {
             c.BaseAddress = new Uri(apexBase);

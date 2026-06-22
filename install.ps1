@@ -1,12 +1,12 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    APEX installer — Adaptive Personalized EXperience
+    APEX installer -- Adaptive Personalized EXperience
 .DESCRIPTION
     Downloads the latest APEX release, installs Ollama (if needed),
     installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/APEX/feature/no-docker/install.ps1 | iex
+    irm https://raw.githubusercontent.com/jstarkwv/APEX/main/install.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
@@ -19,9 +19,66 @@ $ServiceName  = 'APEX'
 $InstallDir   = "$env:LOCALAPPDATA\APEX"
 $ApiPort      = 5000
 $OllamaEmbed  = 'nomic-embed-text'
-$OllamaChat   = 'qwen3:8b'
+$OllamaChat   = 'gemma4'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+function Write-PresidioScript {
+    param([string]$OutPath)
+    $py = @'
+"""Presidio HTTP server for APEX -- listens on port 3000."""
+import json, sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
+
+analyzer = AnalyzerEngine()
+anonymizer = AnonymizerEngine()
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"healthy"}')
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length))
+        text = body.get("text", "")
+        language = body.get("language", "en")
+
+        if self.path == "/analyze":
+            results = analyzer.analyze(text=text, language=language)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps([r.to_dict() for r in results]).encode())
+        elif self.path == "/anonymize":
+            results = analyzer.analyze(text=text, language=language)
+            anon = anonymizer.anonymize(text=text, analyzer_results=results)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"text": anon.text}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass  # Suppress request logging
+
+if __name__ == "__main__":
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
+    print(f"Presidio server listening on http://127.0.0.1:{port}")
+    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+'@
+    $py | Set-Content $OutPath -Encoding UTF8
+}
 function Write-Step  { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
 function Write-Ok    { param($msg) Write-Host "      [OK] $msg" -ForegroundColor Green }
 function Write-Warn  { param($msg) Write-Host "      [WARN] $msg" -ForegroundColor Yellow }
@@ -180,12 +237,38 @@ if (Invoke-OllamaPull $OllamaChat) {
     Write-Warn "Failed to pull $OllamaChat -- you can pull it manually later: ollama pull $OllamaChat"
 }
 
-# ── Presidio PII detection (optional) ──────────────────────────────────────────
-Write-Step "Checking Presidio PII detection (optional)"
+# ── Component selection ────────────────────────────────────────────────────────
+Write-Step "Choose optional components"
+Write-Host ""
+Write-Host "      [Required] API + MCP Server (core)" -ForegroundColor White
+Write-Host ""
+
 $pythonExe = Get-Command python -ErrorAction SilentlyContinue
 if (-not $pythonExe) { $pythonExe = Get-Command python3 -ErrorAction SilentlyContinue }
 
+$installDashboard = Read-Host "      Install Dashboard -- web UI for memories/sessions? [Y/n]"
+$installDashboard = $installDashboard -ne 'n' -and $installDashboard -ne 'N'
+
+$installProxy = Read-Host "      Install Proxy -- MCP audit proxy for PII scanning? [Y/n]"
+$installProxy = $installProxy -ne 'n' -and $installProxy -ne 'N'
+
 if ($pythonExe) {
+    $installPresidio = Read-Host "      Install Presidio -- ML-based PII detection? [Y/n]"
+    $installPresidio = $installPresidio -ne 'n' -and $installPresidio -ne 'N'
+} else {
+    $installPresidio = $false
+}
+
+Write-Host ""
+$components = @("API", "MCP")
+if ($installDashboard) { $components += "Dashboard" }
+if ($installProxy)     { $components += "Proxy" }
+if ($installPresidio)  { $components += "Presidio" }
+Write-Ok "Components: $($components -join ', ')"
+
+# ── Presidio PII detection (optional) ──────────────────────────────────────────
+if ($installPresidio) {
+    Write-Step "Installing Presidio PII detection"
     Write-Host "      Python found at $($pythonExe.Source)" -ForegroundColor Gray
     Write-Host "      Installing Presidio (this may take a minute)..." -ForegroundColor Gray
     try {
@@ -195,79 +278,56 @@ if ($pythonExe) {
             if ($spacyProc.ExitCode -eq 0) {
                 Write-Ok "Presidio installed with spaCy model"
             } else {
-                Write-Warn "Presidio installed but spaCy model download failed — run: python -m spacy download en_core_web_lg"
+                Write-Warn "Presidio installed but spaCy model download failed -- run: python -m spacy download en_core_web_lg"
             }
         } else {
-            Write-Warn "Presidio install failed — APEX will use built-in regex PII scanning"
+            Write-Warn "Presidio install failed -- APEX will use built-in regex PII scanning"
         }
     } catch {
-        Write-Warn "Presidio install failed: $_ — APEX will use built-in regex PII scanning"
+        Write-Warn "Presidio install failed: $_ -- APEX will use built-in regex PII scanning"
     }
 
-    # Create a simple Presidio HTTP server script
     $presidioScript = "$InstallDir\presidio\serve.py"
     New-Item -ItemType Directory -Force -Path "$InstallDir\presidio" | Out-Null
-    @'
-"""Presidio HTTP server for APEX — listens on port 3000."""
-import json, sys
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
-
-analyzer = AnalyzerEngine()
-anonymizer = AnonymizerEngine()
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"healthy"}')
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
-        text = body.get("text", "")
-        language = body.get("language", "en")
-
-        if self.path == "/analyze":
-            results = analyzer.analyze(text=text, language=language)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps([r.to_dict() for r in results]).encode())
-        elif self.path == "/anonymize":
-            results = analyzer.analyze(text=text, language=language)
-            anon = anonymizer.anonymize(text=text, analyzer_results=results)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"text": anon.text}).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass  # Suppress request logging
-
-if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
-    print(f"Presidio server listening on http://127.0.0.1:{port}")
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
-'@ | Set-Content $presidioScript -Encoding UTF8
+    Write-PresidioScript $presidioScript
 
     Write-Ok "Presidio server script saved to $presidioScript"
     Write-Host "      To start: python `"$presidioScript`"" -ForegroundColor Gray
-    Write-Host "      Or add it as a startup task for always-on PII detection" -ForegroundColor Gray
-} else {
-    Write-Warn "Python not found — skipping Presidio install"
-    Write-Warn "APEX will use built-in regex PII scanning (SSN, credit cards, tokens, etc.)"
-    Write-Warn "Install Python and re-run to enable ML-based PII detection"
 }
+
+# ── Stop running APEX processes ────────────────────────────────────────────────
+Write-Step "Stopping running APEX processes (if any)"
+
+# Stop Windows Service if running
+$existingSvc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($existingSvc -and $existingSvc.Status -ne 'Stopped') {
+    Write-Host "      Stopping APEX service..." -ForegroundColor Gray
+    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 30; $i++) {
+        $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if (-not $svc -or $svc.Status -eq 'Stopped') { break }
+        Start-Sleep -Seconds 1
+    }
+    Write-Ok "APEX service stopped"
+} else {
+    Write-Host "      APEX service not running" -ForegroundColor Gray
+}
+
+# Kill any standalone Apex.Api.exe (non-service runs)
+Get-Process -Name 'Apex.Api' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing Apex.Api.exe (PID $($_.Id))..." -ForegroundColor Gray
+    $_ | Stop-Process -Force
+}
+
+# Kill Apex.Mcp.exe (Claude Desktop spawns this)
+Get-Process -Name 'Apex.Mcp' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing Apex.Mcp.exe (PID $($_.Id))..." -ForegroundColor Gray
+    $_ | Stop-Process -Force
+}
+
+# Brief pause for file handles to release
+Start-Sleep -Seconds 2
+Write-Ok "Ready to update"
 
 # ── Download release ───────────────────────────────────────────────────────────
 Write-Step "Downloading latest APEX release"
@@ -294,25 +354,29 @@ Remove-Item $mcpZip
 Write-Ok "MCP server extracted to $InstallDir\mcp"
 
 # Dashboard
-$dashAsset = Get-LatestReleaseAsset 'Apex.Dashboard*.zip'
-if ($dashAsset) {
-    Write-Host "      Downloading $($dashAsset.name)..." -ForegroundColor Gray
-    $dashZip = "$env:TEMP\Apex.Dashboard.zip"
-    Invoke-WebRequest -Uri $dashAsset.browser_download_url -OutFile $dashZip -UseBasicParsing
-    Expand-Archive -Path $dashZip -DestinationPath "$InstallDir\dashboard" -Force
-    Remove-Item $dashZip
-    Write-Ok "Dashboard extracted to $InstallDir\dashboard"
+if ($installDashboard) {
+    $dashAsset = Get-LatestReleaseAsset 'Apex.Dashboard*.zip'
+    if ($dashAsset) {
+        Write-Host "      Downloading $($dashAsset.name)..." -ForegroundColor Gray
+        $dashZip = "$env:TEMP\Apex.Dashboard.zip"
+        Invoke-WebRequest -Uri $dashAsset.browser_download_url -OutFile $dashZip -UseBasicParsing
+        Expand-Archive -Path $dashZip -DestinationPath "$InstallDir\dashboard" -Force
+        Remove-Item $dashZip
+        Write-Ok "Dashboard extracted to $InstallDir\dashboard"
+    }
 }
 
 # Proxy
-$proxyAsset = Get-LatestReleaseAsset 'Apex.Proxy-win-x64.zip'
-if ($proxyAsset) {
-    Write-Host "      Downloading $($proxyAsset.name)..." -ForegroundColor Gray
-    $proxyZip = "$env:TEMP\Apex.Proxy.zip"
-    Invoke-WebRequest -Uri $proxyAsset.browser_download_url -OutFile $proxyZip -UseBasicParsing
-    Expand-Archive -Path $proxyZip -DestinationPath "$InstallDir\proxy" -Force
-    Remove-Item $proxyZip
-    Write-Ok "Proxy extracted to $InstallDir\proxy"
+if ($installProxy) {
+    $proxyAsset = Get-LatestReleaseAsset 'Apex.Proxy-win-x64.zip'
+    if ($proxyAsset) {
+        Write-Host "      Downloading $($proxyAsset.name)..." -ForegroundColor Gray
+        $proxyZip = "$env:TEMP\Apex.Proxy.zip"
+        Invoke-WebRequest -Uri $proxyAsset.browser_download_url -OutFile $proxyZip -UseBasicParsing
+        Expand-Archive -Path $proxyZip -DestinationPath "$InstallDir\proxy" -Force
+        Remove-Item $proxyZip
+        Write-Ok "Proxy extracted to $InstallDir\proxy"
+    }
 }
 
 # ── Windows Service ────────────────────────────────────────────────────────────
@@ -326,16 +390,9 @@ if (-not $script:SkipService) {
         Write-Ok "Registered 'APEX' Event Log source"
     }
 
+    # Service was already stopped earlier; just delete if it exists
     $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($existing) {
-        Write-Host "      Stopping existing service..." -ForegroundColor Gray
-        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-        $timeout = 30
-        for ($i = 0; $i -lt $timeout; $i++) {
-            $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-            if (-not $svc -or $svc.Status -eq 'Stopped') { break }
-            Start-Sleep -Seconds 1
-        }
         sc.exe delete $ServiceName | Out-Null
         for ($i = 0; $i -lt 15; $i++) {
             $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -494,8 +551,8 @@ Write-Host ""
 Write-Host "   API:        http://localhost:$ApiPort" -ForegroundColor White
 Write-Host "   Swagger:    http://localhost:$ApiPort/swagger" -ForegroundColor White
 Write-Host "   Hangfire:   http://localhost:$ApiPort/hangfire" -ForegroundColor White
-if (Test-Path "$InstallDir\dashboard") {
-    Write-Host "   Dashboard:  run 'Apex.Dashboard.exe' in $InstallDir\dashboard" -ForegroundColor White
+if ($installDashboard) {
+    Write-Host "   Dashboard:  http://localhost:$ApiPort" -ForegroundColor White
 }
 if (Test-Path "$InstallDir\presidio\serve.py") {
     Write-Host "   Presidio:   python `"$InstallDir\presidio\serve.py`"" -ForegroundColor White
@@ -510,5 +567,5 @@ if ($script:SkipService) {
     Write-Host "   To run APEX as a service, re-run this script as Administrator." -ForegroundColor Yellow
     Write-Host ""
 }
-Write-Host "   To uninstall: irm https://raw.githubusercontent.com/$RepoOwner/$RepoName/feature/no-docker/uninstall.ps1 | iex" -ForegroundColor Gray
+Write-Host "   To uninstall: irm https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/uninstall.ps1 | iex" -ForegroundColor Gray
 Write-Host ""

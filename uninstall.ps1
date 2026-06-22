@@ -3,7 +3,7 @@
 .SYNOPSIS
     APEX uninstaller
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/APEX/feature/no-docker/uninstall.ps1 | iex
+    irm https://raw.githubusercontent.com/jstarkwv/APEX/main/uninstall.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
@@ -82,25 +82,16 @@ if (Test-Path $claudeConfigFile) {
 Write-Step "Removing install directory"
 if (Test-Path $InstallDir) {
     if ($keepData) {
-        # Remove binaries but keep the data folder
-        $dataDir = "$env:APPDATA\APEX"
-        Write-Host "      Keeping data at $dataDir" -ForegroundColor Gray
-        Remove-Item -Recurse -Force "$InstallDir\api"     -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "$InstallDir\mcp"     -ErrorAction SilentlyContinue
+        Write-Host "      Keeping database at $InstallDir\apex.db" -ForegroundColor Gray
+        Remove-Item -Recurse -Force "$InstallDir\api"       -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force "$InstallDir\mcp"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\dashboard" -ErrorAction SilentlyContinue
-        # Remove install dir if now empty
-        if (-not (Get-ChildItem $InstallDir -ErrorAction SilentlyContinue)) {
-            Remove-Item -Force $InstallDir
-        }
-        Write-Ok "Binaries removed. Data preserved at $dataDir"
+        Remove-Item -Recurse -Force "$InstallDir\proxy"     -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force "$InstallDir\presidio"  -ErrorAction SilentlyContinue
+        Write-Ok "Binaries removed. Data preserved at $InstallDir"
     } else {
         Remove-Item -Recurse -Force $InstallDir
-        $dataDir = "$env:APPDATA\APEX"
-        if (Test-Path $dataDir) {
-            Remove-Item -Recurse -Force $dataDir
-            Write-Ok "Data directory removed"
-        }
-        Write-Ok "Install directory removed"
+        Write-Ok "Install directory and data removed"
     }
 } else {
     Write-Ok "Install directory not found — nothing to remove"
@@ -109,7 +100,7 @@ if (Test-Path $InstallDir) {
 Write-Host ""
 Write-Host "  APEX has been uninstalled." -ForegroundColor Green
 if ($keepData) {
-    Write-Host "  Your data is preserved at $env:APPDATA\APEX\" -ForegroundColor Gray
+    Write-Host "  Your data is preserved at $InstallDir\" -ForegroundColor Gray
 }
 Write-Host "  Restart Claude Desktop to deactivate the MCP tools." -ForegroundColor Yellow
 Write-Host ""

@@ -2,7 +2,7 @@ namespace Apex.Core.Interfaces;
 
 /// <summary>
 /// Calls local Ollama for text generation (summarization, extraction).
-/// Uses qwen3:8b for structured output.
+/// Uses gemma4 for structured output.
 /// </summary>
 public interface ILlmService
 {
