@@ -341,3 +341,26 @@ body {
     color: var(--text-secondary);
     margin-bottom: 0.3rem;
 }
+
+/* Tabs */
+.tabbar {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.25rem;
+}
+
+.tabbar .tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.tabbar .tab:hover { color: var(--text-primary); }
+.tabbar .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
