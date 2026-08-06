@@ -19,7 +19,7 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 | Component | Technology | Notes |
 |-----------|-----------|-------|
 | API | .NET 8 Web API | Windows Service via `sc create` |
-| Database | SQLite (EF Core) | `%APPDATA%\APEX\apex.db`, auto-created on startup |
+| Database | SQLite (EF Core) | `%PROGRAMDATA%\APEX\apex.db`, auto-created on startup |
 | Vector Memory | EF Core + C# cosine similarity | `byte[]` BLOB embeddings, no external vector DB |
 | Cache | `IMemoryCache` | In-process, replaces Redis |
 | Queue | `Channel<T>` | In-process, replaces Redis BLPOP |
@@ -232,7 +232,7 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 | Item | Path |
 |------|------|
 | APEX repo | `C:\Users\Joe\source\repos\APEX` (branch: `feature/no-docker`) |
-| SQLite DB | `%APPDATA%\APEX\apex.db` (auto-created) |
+| SQLite DB | `%PROGRAMDATA%\APEX\apex.db` (auto-created) |
 | Claude Desktop config | `%APPDATA%\Claude\claude_desktop_config.json` |
 | APEX.Licensing outputs | `/mnt/user-data/outputs/APEX.Licensing/` |
 | Pack tools outputs | `/mnt/user-data/outputs/pack-tools/` |

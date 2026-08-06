@@ -18,9 +18,9 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
 
-// ── SQLite connection string (expands %APPDATA%) ─────────────────
+// ── SQLite connection string (expands %PROGRAMDATA% et al.) ──────
 var rawConn = builder.Configuration.GetConnectionString("ApexDb")
-    ?? "Data Source=%APPDATA%\\APEX\\apex.db";
+    ?? "Data Source=%PROGRAMDATA%\\APEX\\apex.db";
 var sqliteConn = rawConn
     .Replace("%APPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
     .Replace("%LOCALAPPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))

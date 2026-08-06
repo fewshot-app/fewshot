@@ -175,7 +175,7 @@ dotnet build
 dotnet run --project src/Apex.Api
 ```
 
-Creates `%APPDATA%\APEX\apex.db` on first run. No migrations needed.
+Creates `%PROGRAMDATA%\APEX\apex.db` on first run. No migrations needed.
 
 ### 4. Configure Claude Desktop
 

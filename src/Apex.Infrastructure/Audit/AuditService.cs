@@ -32,6 +32,8 @@ public class AuditService : IAuditService
     // Stage 3: Shannon entropy threshold for detecting secrets
     private const double EntropyThreshold = 4.5;
     private const int MinTokenLength = 20;
+    private static readonly Regex EntropyTokenPattern =
+        new($@"[A-Za-z0-9\-._~+/=]{{{MinTokenLength},}}", RegexOptions.Compiled);
 
     public AuditService(ApexDbContext db, IHttpClientFactory httpClientFactory)
     {
@@ -145,9 +147,8 @@ public class AuditService : IAuditService
     private static List<AuditFinding> AnalyzeEntropy(string content)
     {
         var findings = new List<AuditFinding>();
-        var tokenPattern = new Regex(@"[A-Za-z0-9\-._~+/=]{" + MinTokenLength + @",}");
 
-        foreach (Match match in tokenPattern.Matches(content))
+        foreach (Match match in EntropyTokenPattern.Matches(content))
         {
             var entropy = CalculateShannonEntropy(match.Value);
             if (entropy > EntropyThreshold)
@@ -156,7 +157,9 @@ public class AuditService : IAuditService
                 {
                     DetectedType = "HighEntropySecret",
                     Stage = AuditStage.Entropy,
-                    Confidence = Math.Min(entropy / 6.0, 1.0)
+                    Confidence = Math.Min(entropy / 6.0, 1.0),
+                    StartIndex = match.Index,
+                    Length = match.Length
                 });
             }
         }
@@ -180,10 +183,35 @@ public class AuditService : IAuditService
 
     private static string RedactContent(string content, List<AuditFinding> findings)
     {
-        var redacted = content;
-        foreach (var (_, pattern) in RegexPatterns)
-            redacted = pattern.Replace(redacted, "[REDACTED]");
-        return redacted;
+        var ranges = findings
+            .Where(f => f.Length > 0 && f.StartIndex >= 0 && f.StartIndex + f.Length <= content.Length)
+            .Select(f => (Start: f.StartIndex, End: f.StartIndex + f.Length))
+            .OrderBy(r => r.Start)
+            .ToList();
+
+        if (ranges.Count == 0) return content;
+
+        var merged = new List<(int Start, int End)>();
+        var current = ranges[0];
+        foreach (var r in ranges.Skip(1))
+        {
+            if (r.Start <= current.End)
+                current.End = Math.Max(current.End, r.End);
+            else
+            {
+                merged.Add(current);
+                current = r;
+            }
+        }
+        merged.Add(current);
+
+        var sb = new StringBuilder(content);
+        for (var i = merged.Count - 1; i >= 0; i--)
+        {
+            sb.Remove(merged[i].Start, merged[i].End - merged[i].Start);
+            sb.Insert(merged[i].Start, "[REDACTED]");
+        }
+        return sb.ToString();
     }
 
     private async Task LogAuditAsync(int sessionId, List<AuditFinding> findings, AuditPipelineResult result)

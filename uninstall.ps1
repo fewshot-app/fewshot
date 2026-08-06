@@ -81,16 +81,18 @@ if (Test-Path $claudeConfigFile) {
 # ── Remove files ───────────────────────────────────────────────────────────────
 Write-Step "Removing install directory"
 if (Test-Path $InstallDir) {
+    $DataDir = "$env:PROGRAMDATA\APEX"
     if ($keepData) {
-        Write-Host "      Keeping database at $InstallDir\apex.db" -ForegroundColor Gray
+        Write-Host "      Keeping database at $DataDir\apex.db" -ForegroundColor Gray
         Remove-Item -Recurse -Force "$InstallDir\api"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\mcp"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\dashboard" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\proxy"     -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\presidio"  -ErrorAction SilentlyContinue
-        Write-Ok "Binaries removed. Data preserved at $InstallDir"
+        Write-Ok "Binaries removed. Data preserved at $DataDir"
     } else {
         Remove-Item -Recurse -Force $InstallDir
+        Remove-Item -Recurse -Force $DataDir -ErrorAction SilentlyContinue
         Write-Ok "Install directory and data removed"
     }
 } else {

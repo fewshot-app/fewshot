@@ -216,7 +216,7 @@ public class AuditClient
         {
             var types = string.Join(", ", blocking.Select(f => f.Type).Distinct());
             Console.Error.WriteLine($"[APEX-PROXY] ⚠ REDACTED {direction} ({method}): {types}");
-            return Redact(rawLine);
+            return Redact(rawLine, blocking);
         }
 
         var types2 = string.Join(", ", findings.Select(f => f.Type).Distinct());
@@ -364,11 +364,22 @@ public class AuditClient
         catch { return (string.Empty, "unknown"); }
     }
 
-    private static string Redact(string rawLine)
+    private static string Redact(string rawLine, List<ProxyFinding> blocking)
     {
         var result = rawLine;
+        var blockedTypes = blocking.Select(f => f.Type).ToHashSet();
+
         foreach (var (_, p) in Patterns)
             result = p.Replace(result, "[REDACTED]");
+
+        foreach (var (name, pattern, _) in PromptInjectionPatterns)
+            if (blockedTypes.Contains(name))
+                result = pattern.Replace(result, "[BLOCKED]");
+
+        if (blockedTypes.Contains("CommandInjection"))
+            foreach (var cmd in DangerousCommands)
+                result = Regex.Replace(result, Regex.Escape(cmd), "[BLOCKED]", RegexOptions.IgnoreCase);
+
         return result;
     }
 
