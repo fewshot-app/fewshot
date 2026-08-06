@@ -499,13 +499,14 @@ try {
         $rawJson = [System.IO.File]::ReadAllText($claudeConfigFile, [System.Text.Encoding]::UTF8).Trim()
         $existing = $rawJson | ConvertFrom-Json
 
-        if (-not $existing.mcpServers) {
-            $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value @{}
+        # StrictMode-safe property probe; PSCustomObject (not hashtable) so ConvertTo-Json serializes it
+        if (-not $existing.PSObject.Properties['mcpServers']) {
+            $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([pscustomobject]@{})
         }
-        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name apex -Value @{
+        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name apex -Value ([pscustomobject]@{
             command = $mcpExe
             args    = @()
-        } -Force
+        }) -Force
 
         $newJson = $existing | ConvertTo-Json -Depth 10
         # Write WITHOUT BOM -- critical for Claude Desktop compatibility

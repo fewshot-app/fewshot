@@ -49,9 +49,9 @@ public class PackAntiPattern
 /// </summary>
 public class EncryptedPackEnvelope
 {
-    public string Format { get; set; } = "apexpack-v1";
+    public string Format { get; set; } = "apexpack-v2";
     public string PackId { get; set; } = string.Empty;
-    public string Cipher { get; set; } = "AES-256-CBC";
+    public string Cipher { get; set; } = "AES-256-GCM";
     public string Iv { get; set; } = string.Empty;
     public string Hash { get; set; } = string.Empty;
     public string Data { get; set; } = string.Empty;

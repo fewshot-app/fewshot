@@ -27,7 +27,7 @@ var sqliteConn = rawConn
     .Replace("%PROGRAMDATA%", Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
 
 // Ensure data directory exists
-var dbPath = sqliteConn.Replace("Data Source=", "").Trim();
+var dbPath = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(sqliteConn).DataSource;
 Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 
 // ── Data ─────────────────────────────────────────────────────────
@@ -110,7 +110,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(o => o.AddPolicy("Dashboard", p =>
-    p.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
+    p.SetIsOriginAllowed(origin =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var u) && u.Host == "localhost")
      .AllowAnyMethod().AllowAnyHeader().AllowCredentials()));
 
 var app = builder.Build();
@@ -119,7 +120,37 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApexDbContext>();
-    await db.Database.EnsureCreatedAsync();
+
+    // Baseline: DBs created by EnsureCreated (pre-migrations) have tables but no
+    // __EFMigrationsHistory. Record InitialCreate as already applied, then migrate.
+    var migrations = db.Database.GetMigrations().ToList();
+    if (migrations.Count > 0)
+    {
+        var conn = db.Database.GetDbConnection();
+        await conn.OpenAsync();
+        long userTables, historyTables;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory'";
+            historyTables = (long)(await cmd.ExecuteScalarAsync())!;
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'";
+            userTables = (long)(await cmd.ExecuteScalarAsync())!;
+        }
+        if (historyTables == 0 && userTables > 0)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "CREATE TABLE \"__EFMigrationsHistory\" (\"MigrationId\" TEXT NOT NULL CONSTRAINT \"PK___EFMigrationsHistory\" PRIMARY KEY, \"ProductVersion\" TEXT NOT NULL)");
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
+                migrations[0], "8.0.23");
+        }
+        await db.Database.MigrateAsync();
+    }
+    else
+    {
+        // No migrations generated yet — fall back to EnsureCreated
+        await db.Database.EnsureCreatedAsync();
+    }
 
     // Load persisted gate thresholds
     try
@@ -203,8 +234,9 @@ app.MapGet("/health", async (IHttpClientFactory httpFactory, IConfiguration conf
 
     try
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-        var response = await http.GetAsync($"{ollamaUrl}/api/tags");
+        var http = httpFactory.CreateClient();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var response = await http.GetAsync($"{ollamaUrl}/api/tags", cts.Token);
         checks["ollama"] = new { status = response.IsSuccessStatusCode ? "healthy" : "degraded" };
     }
     catch { checks["ollama"] = new { status = "offline" }; }

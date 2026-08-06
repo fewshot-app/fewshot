@@ -98,7 +98,9 @@ public class MemoryService : IMemoryService
                                m.OutcomeLabel, m.Tags, m.Language, m.CreatedAt, m.Embedding })
             .ToListAsync();
 
+        var expectedBytes = queryVector.Length * sizeof(float);
         var results = all
+            .Where(m => m.Embedding is { Length: > 0 } && m.Embedding.Length == expectedBytes)
             .Select(m => new { Memory = m, Score = CosineSimilarity(queryVector, ToFloats(m.Embedding)) })
             .Where(x => x.Score >= minScore)
             .OrderByDescending(x => x.Score)
@@ -156,7 +158,9 @@ public class MemoryService : IMemoryService
 
         var all = await _db.Memories.Select(m => m.Embedding).ToListAsync();
 
-        return all.Any(e => CosineSimilarity(vector, ToFloats(e)) >= DuplicateThreshold);
+        var expectedBytes = vector.Length * sizeof(float);
+        return all.Any(e => e is { Length: > 0 } && e.Length == expectedBytes
+                            && CosineSimilarity(vector, ToFloats(e)) >= DuplicateThreshold);
     }
 
     // ── Helpers ───────────────────────────────────────────────────
@@ -197,6 +201,7 @@ public class MemoryService : IMemoryService
     /// <summary>Cosine similarity in [0, 1]. Both vectors must be 768-dim.</summary>
     private static double CosineSimilarity(float[] a, float[] b)
     {
+        if (a.Length == 0 || a.Length != b.Length) return 0;
         double dot = 0, normA = 0, normB = 0;
         for (int i = 0; i < a.Length; i++)
         {

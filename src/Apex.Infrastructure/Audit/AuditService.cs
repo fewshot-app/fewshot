@@ -67,9 +67,9 @@ public class AuditService : IAuditService
             var presidioFindings = await RunPresidioAsync(content);
             findings.AddRange(presidioFindings);
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            // Presidio sidecar unavailable — fail open per architecture doc
+            // Presidio sidecar unavailable or timed out — fail open per architecture doc
         }
 
         // Stage 3: Shannon entropy on long tokens in code blocks
@@ -78,7 +78,7 @@ public class AuditService : IAuditService
 
         // Determine verdict
         var hasBlockingFinding = findings.Any(f => f.Confidence >= 0.95 &&
-            f.DetectedType is "SSN" or "PrivateKey" or "ConnectionString");
+            f.DetectedType is "SSN" or "US_SSN" or "PrivateKey" or "ConnectionString");
 
         var result = new AuditPipelineResult
         {

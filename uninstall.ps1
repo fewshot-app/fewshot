@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $ServiceName = 'APEX'
 $InstallDir  = "$env:LOCALAPPDATA\APEX"
+$DataDir     = "$env:PROGRAMDATA\APEX"
 
 function Write-Step { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
 function Write-Ok   { param($msg) Write-Host "      [OK] $msg" -ForegroundColor Green }
@@ -47,7 +48,7 @@ if (Test-Admin) {
         Write-Ok "Service not found (already removed)"
     }
 } else {
-    Write-Warn "Not running as Administrator — cannot remove Windows Service."
+    Write-Warn "Not running as Administrator -- cannot remove Windows Service."
     Write-Warn "Run 'sc delete APEX' as Administrator to remove it manually."
 }
 
@@ -64,24 +65,25 @@ $claudeConfigFile = "$env:APPDATA\Claude\claude_desktop_config.json"
 if (Test-Path $claudeConfigFile) {
     try {
         $config = Get-Content $claudeConfigFile -Raw | ConvertFrom-Json
-        if ($config.mcpServers -and $config.mcpServers.PSObject.Properties['apex']) {
+        if ($config.PSObject.Properties['mcpServers'] -and $config.mcpServers.PSObject.Properties['apex']) {
             $config.mcpServers.PSObject.Properties.Remove('apex')
-            $config | ConvertTo-Json -Depth 10 | Set-Content $claudeConfigFile -Encoding UTF8
+            $newJson = ($config | ConvertTo-Json -Depth 10).Trim()
+            # Write WITHOUT BOM -- must match install.ps1 for Claude Desktop compatibility
+            [System.IO.File]::WriteAllText($claudeConfigFile, $newJson, [System.Text.UTF8Encoding]::new($false))
             Write-Ok "Removed apex entry from claude_desktop_config.json"
         } else {
-            Write-Ok "No apex MCP entry found — nothing to remove"
+            Write-Ok "No apex MCP entry found -- nothing to remove"
         }
     } catch {
         Write-Warn "Could not update claude_desktop_config.json: $_"
     }
 } else {
-    Write-Ok "Claude Desktop config not found — nothing to remove"
+    Write-Ok "Claude Desktop config not found -- nothing to remove"
 }
 
 # ── Remove files ───────────────────────────────────────────────────────────────
 Write-Step "Removing install directory"
 if (Test-Path $InstallDir) {
-    $DataDir = "$env:PROGRAMDATA\APEX"
     if ($keepData) {
         Write-Host "      Keeping database at $DataDir\apex.db" -ForegroundColor Gray
         Remove-Item -Recurse -Force "$InstallDir\api"       -ErrorAction SilentlyContinue
@@ -92,17 +94,21 @@ if (Test-Path $InstallDir) {
         Write-Ok "Binaries removed. Data preserved at $DataDir"
     } else {
         Remove-Item -Recurse -Force $InstallDir
-        Remove-Item -Recurse -Force $DataDir -ErrorAction SilentlyContinue
-        Write-Ok "Install directory and data removed"
+        Write-Ok "Install directory removed"
     }
 } else {
-    Write-Ok "Install directory not found — nothing to remove"
+    Write-Ok "Install directory not found -- nothing to remove"
+}
+
+if (-not $keepData -and (Test-Path $DataDir)) {
+    Remove-Item -Recurse -Force $DataDir -ErrorAction SilentlyContinue
+    Write-Ok "Data directory removed"
 }
 
 Write-Host ""
 Write-Host "  APEX has been uninstalled." -ForegroundColor Green
 if ($keepData) {
-    Write-Host "  Your data is preserved at $InstallDir\" -ForegroundColor Gray
+    Write-Host "  Your data is preserved at $DataDir\" -ForegroundColor Gray
 }
 Write-Host "  Restart Claude Desktop to deactivate the MCP tools." -ForegroundColor Yellow
 Write-Host ""

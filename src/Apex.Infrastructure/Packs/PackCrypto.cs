@@ -36,26 +36,29 @@ public static class PackCrypto
         var plaintext = JsonSerializer.Serialize(pack, _json);
         var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
 
-        // SHA256 integrity hash of plaintext
         var hash = SHA256.HashData(plaintextBytes);
 
-        using var aes = Aes.Create();
-        aes.Key = key;
-        aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.PKCS7;
-        aes.GenerateIV();
+        var nonce = new byte[12];
+        RandomNumberGenerator.Fill(nonce);
+        var ciphertext = new byte[plaintextBytes.Length];
+        var tag = new byte[16];
 
-        using var encryptor = aes.CreateEncryptor();
-        var ciphertext = encryptor.TransformFinalBlock(plaintextBytes, 0, plaintextBytes.Length);
+        using var aes = new AesGcm(key, tag.Length);
+        aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
+
+        // Data = ciphertext || tag (16-byte GCM tag appended)
+        var data = new byte[ciphertext.Length + tag.Length];
+        ciphertext.CopyTo(data, 0);
+        tag.CopyTo(data, ciphertext.Length);
 
         return new EncryptedPackEnvelope
         {
-            Format = "apexpack-v1",
+            Format = "apexpack-v2",
             PackId = pack.PackId,
-            Cipher = "AES-256-CBC",
-            Iv = Convert.ToBase64String(aes.IV),
+            Cipher = "AES-256-GCM",
+            Iv = Convert.ToBase64String(nonce),
             Hash = Convert.ToHexString(hash).ToLowerInvariant(),
-            Data = Convert.ToBase64String(ciphertext)
+            Data = Convert.ToBase64String(data)
         };
     }
 
@@ -65,25 +68,52 @@ public static class PackCrypto
     /// </summary>
     public static ApexPack Decrypt(EncryptedPackEnvelope envelope, string base64Key)
     {
-        if (envelope.Format != "apexpack-v1")
-            throw new InvalidOperationException($"Unsupported pack format: {envelope.Format}");
-
         var key = Convert.FromBase64String(base64Key);
         var iv = Convert.FromBase64String(envelope.Iv);
-        var ciphertext = Convert.FromBase64String(envelope.Data);
+        var data = Convert.FromBase64String(envelope.Data);
 
-        using var aes = Aes.Create();
-        aes.Key = key;
-        aes.IV = iv;
-        aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.PKCS7;
+        byte[] plaintextBytes;
+        switch (envelope.Format)
+        {
+            case "apexpack-v2":
+            {
+                const int tagLength = 16;
+                if (data.Length < tagLength)
+                    throw new InvalidOperationException("Pack data is truncated.");
+                var ciphertext = data[..^tagLength];
+                var tag = data[^tagLength..];
+                plaintextBytes = new byte[ciphertext.Length];
+                using var aes = new AesGcm(key, tagLength);
+                try
+                {
+                    aes.Decrypt(iv, ciphertext, tag, plaintextBytes);
+                }
+                catch (AuthenticationTagMismatchException)
+                {
+                    throw new InvalidOperationException("Pack integrity check failed — wrong key, or data has been corrupted or tampered with.");
+                }
+                break;
+            }
+            case "apexpack-v1":
+            {
+                // Legacy CBC packs exported before v2
+                using var aes = Aes.Create();
+                aes.Key = key;
+                aes.IV = iv;
+                aes.Mode = CipherMode.CBC;
+                aes.Padding = PaddingMode.PKCS7;
+                using var decryptor = aes.CreateDecryptor();
+                plaintextBytes = decryptor.TransformFinalBlock(data, 0, data.Length);
+                break;
+            }
+            default:
+                throw new InvalidOperationException($"Unsupported pack format: {envelope.Format}");
+        }
 
-        using var decryptor = aes.CreateDecryptor();
-        var plaintextBytes = decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
-
-        // Verify integrity
-        var actualHash = Convert.ToHexString(SHA256.HashData(plaintextBytes)).ToLowerInvariant();
-        if (actualHash != envelope.Hash)
+        // Verify plaintext hash (defense-in-depth for v2, sole integrity check for v1)
+        var expectedHash = Convert.FromHexString(envelope.Hash);
+        var actualHash = SHA256.HashData(plaintextBytes);
+        if (!CryptographicOperations.FixedTimeEquals(actualHash, expectedHash))
             throw new InvalidOperationException("Pack integrity check failed — data may be corrupted or tampered with.");
 
         var pack = JsonSerializer.Deserialize<ApexPack>(plaintextBytes, _json)

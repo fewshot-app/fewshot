@@ -108,7 +108,7 @@ Console.Error.WriteLine($"[APEX-PROXY] Starting. Server: {serverExe}. APEX: {ape
 // ── Spawn the real MCP server ─────────────────────────────────────────────────
 var psi = new ProcessStartInfo
 {
-    FileName = serverExe,
+    FileName = ResolveExecutable(serverExe),
     UseShellExecute = false,
     RedirectStandardInput = true,
     RedirectStandardOutput = true,
@@ -117,9 +117,8 @@ var psi = new ProcessStartInfo
     StandardOutputEncoding = new UTF8Encoding(false),
 };
 
-// Handle args that may include a sub-command (e.g. "npx -- @mcp/server-filesystem C:\path")
-if (serverArgs.Count > 0)
-    psi.Arguments = string.Join(" ", serverArgs.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
+foreach (var a in serverArgs)
+    psi.ArgumentList.Add(a);
 
 using var server = Process.Start(psi)
     ?? throw new InvalidOperationException($"[APEX-PROXY] Failed to start: {serverExe}");
@@ -168,6 +167,27 @@ return server.ExitCode;
 [DllImport("kernel32.dll", SetLastError = true)]
 static extern nint GetStdHandle(int nStdHandle);
 
+// Resolve extensionless commands (npx, node) to their .exe/.cmd on PATH so
+// Process.Start with UseShellExecute=false can launch them on Windows.
+static string ResolveExecutable(string exe)
+{
+    if (!OperatingSystem.IsWindows() || Path.HasExtension(exe) || File.Exists(exe))
+        return exe;
+
+    var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
+        .Split(';', StringSplitOptions.RemoveEmptyEntries);
+    string[] exts = [".exe", ".cmd", ".bat"];
+
+    foreach (var dir in dirs)
+        foreach (var ext in exts)
+        {
+            var candidate = Path.Combine(dir.Trim(), exe + ext);
+            if (File.Exists(candidate)) return candidate;
+        }
+
+    return exe;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // AuditClient — scans JSON-RPC messages, logs findings to APEX API
 // ═════════════════════════════════════════════════════════════════════════════
@@ -205,13 +225,14 @@ public class AuditClient
         var (textToScan, method) = ExtractScanTarget(rawLine);
         if (string.IsNullOrEmpty(textToScan)) return rawLine;
 
-        var findings = Scan(textToScan);
+        var findings = Scan(textToScan, direction);
         if (findings.Count == 0) return rawLine;
 
-        // Log async — never block the stdio pipe
-        _ = LogAsync(direction, method, findings, textToScan);
-
         var blocking = findings.Where(f => BlockingTypes.Contains(f.Type) && f.Confidence >= 0.9).ToList();
+
+        // Log async — never block the stdio pipe
+        _ = LogAsync(direction, method, findings, textToScan, blocking.Count > 0);
+
         if (blocking.Count > 0)
         {
             var types = string.Join(", ", blocking.Select(f => f.Type).Distinct());
@@ -224,7 +245,7 @@ public class AuditClient
         return rawLine;
     }
 
-    private static List<ProxyFinding> Scan(string text)
+    private static List<ProxyFinding> Scan(string text, string direction)
     {
         var findings = new List<ProxyFinding>();
 
@@ -241,11 +262,15 @@ public class AuditClient
                 findings.Add(new("HighEntropySecret", "Entropy", Math.Min(e / 6.0, 1.0)));
         }
 
-        // Stage 3: Prompt injection detection
-        findings.AddRange(DetectPromptInjection(text));
+        // Stage 3: Prompt injection — inbound only (instructions embedded in tool results;
+        // outbound args are Claude-authored, matches there are just quoted user text)
+        if (direction == "inbound")
+            findings.AddRange(DetectPromptInjection(text));
 
-        // Stage 4: Command injection detection
-        findings.AddRange(DetectCommandInjection(text));
+        // Stage 4: Command injection — outbound only (dangerous args heading to a server;
+        // inbound results legitimately contain source code full of sudo/eval/exec)
+        if (direction == "outbound")
+            findings.AddRange(DetectCommandInjection(text));
 
         return findings;
     }
@@ -366,11 +391,8 @@ public class AuditClient
 
     private static string Redact(string rawLine, List<ProxyFinding> blocking)
     {
-        var result = rawLine;
+        var result = RedactSecrets(rawLine);
         var blockedTypes = blocking.Select(f => f.Type).ToHashSet();
-
-        foreach (var (_, p) in Patterns)
-            result = p.Replace(result, "[REDACTED]");
 
         foreach (var (name, pattern, _) in PromptInjectionPatterns)
             if (blockedTypes.Contains(name))
@@ -383,17 +405,29 @@ public class AuditClient
         return result;
     }
 
-    private async Task LogAsync(string direction, string method, List<ProxyFinding> findings, string snippet)
+    private static string RedactSecrets(string text)
+    {
+        var result = text;
+        foreach (var (_, p) in Patterns)
+            result = p.Replace(result, "[REDACTED]");
+        result = TokenPattern.Replace(result,
+            m => Entropy(m.Value) > EntropyThreshold ? "[REDACTED]" : m.Value);
+        return result;
+    }
+
+    private async Task LogAsync(string direction, string method, List<ProxyFinding> findings, string snippet, bool wasRedacted)
     {
         try
         {
+            var safeSnippet = RedactSecrets(snippet);
             var payload = JsonSerializer.Serialize(new
             {
                 source = "apex-proxy",
                 direction,
                 method,
                 findings = findings.Select(f => new { f.Type, f.Stage, f.Confidence }),
-                snippet = snippet.Length > 300 ? snippet[..300] + "…" : snippet,
+                snippet = safeSnippet.Length > 300 ? safeSnippet[..300] + "…" : safeSnippet,
+                wasRedacted,
                 timestamp = DateTime.UtcNow
             });
             using var content = new StringContent(payload, Encoding.UTF8, "application/json");

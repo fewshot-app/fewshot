@@ -135,7 +135,10 @@ public class ApexClient
         });
 
         if (!resp.IsSuccessStatusCode)
-            return $"[APEX] Context unavailable — {resp.StatusCode}";
+        {
+            var detail = await resp.Content.ReadAsStringAsync();
+            return $"[APEX] Context unavailable — {resp.StatusCode}: {Truncate(detail, 500)}";
+        }
 
         var result = await resp.Content.ReadFromJsonAsync<ContextResult>(_json);
         return result?.AssembledContext ?? "[APEX] Empty context returned";
@@ -169,7 +172,11 @@ public class ApexClient
     public async Task<string> SearchMemoryAsync(string query, int topK = 5)
     {
         var resp = await Http.PostAsJsonAsync("/api/memory/search", new { query, topK, minScore = 0.55 });
-        if (!resp.IsSuccessStatusCode) return "No memories found.";
+        if (!resp.IsSuccessStatusCode)
+        {
+            var detail = await resp.Content.ReadAsStringAsync();
+            return $"[APEX] Memory search failed — {resp.StatusCode}: {Truncate(detail, 500)}";
+        }
         var memories = await resp.Content.ReadFromJsonAsync<List<MemoryResult>>(_json);
         if (memories is null || memories.Count == 0) return "No relevant memories found.";
         return string.Join("\n\n", memories.Select((m, i) =>
@@ -177,6 +184,9 @@ public class ApexClient
             (m.Solution != null ? $"\nSolution: {m.Solution}" : "") +
             (m.Tags != null ? $"\nTags: {m.Tags}" : "")));
     }
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..max] + "…";
 }
 
 // DTOs

@@ -63,17 +63,16 @@ public class ContextInjector : IContextInjector
         // Build semantic search query from current state
         var searchQuery = BuildSearchQuery(state);
 
-        // Qdrant search can run in parallel with SQL (different connections)
-        var memoriesTask = _memory.SearchAsync(searchQuery, sessionId);
-
-        // SQL queries must be sequential (single DbContext is not thread-safe)
+        // All three hit the same scoped ApexDbContext (memory search is in-process
+        // cosine over _db.Memories, not Qdrant) — must run sequentially
+        var memories = await _memory.SearchAsync(searchQuery, sessionId);
         var allPreferences = await _preferences.GetAllAsync();
         var allAntiPatterns = await _antiPatterns.GetAllAsync();
 
         var inputs = new ContextInputs
         {
             State = state,
-            Memories = await memoriesTask,
+            Memories = memories,
             Preferences = allPreferences,
             AntiPatterns = allAntiPatterns,
             Facts = facts ?? new ProjectFacts()

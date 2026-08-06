@@ -38,9 +38,10 @@ public class ProxyAuditController : ControllerBase
             FindingTypes = string.Join(",", evt.Findings.Select(f => f.Type).Distinct()),
             FindingCount = evt.Findings.Count,
             MaxConfidence = evt.Findings.Count > 0 ? evt.Findings.Max(f => f.Confidence) : 0,
-            WasRedacted = evt.Findings.Any(f =>
+            WasRedacted = evt.WasRedacted ?? evt.Findings.Any(f =>
                 f.Confidence >= 0.9 &&
-                new[] { "SSN", "PrivateKey", "ConnectionString", "BearerToken", "JwtToken", "CreditCard" }
+                new[] { "SSN", "PrivateKey", "ConnectionString", "BearerToken", "JwtToken", "CreditCard",
+                        "CommandInjection", "SystemPromptOverride", "HiddenInstruction" }
                     .Contains(f.Type)),
             Snippet = evt.Snippet?[..Math.Min(500, evt.Snippet.Length)],
             Source = evt.Source ?? "apex-proxy",
@@ -98,6 +99,7 @@ public class ProxyAuditEvent
     public string? Method { get; set; }
     public List<ProxyFindingDto> Findings { get; set; } = [];
     public string? Snippet { get; set; }
+    public bool? WasRedacted { get; set; }
     public DateTime? Timestamp { get; set; }
 }
 
