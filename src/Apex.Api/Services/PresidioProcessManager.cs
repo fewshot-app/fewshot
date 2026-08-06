@@ -10,8 +10,9 @@ public enum PresidioStatus { Stopped, Starting, Running, Restarting, Disabled }
 public class PresidioProcessManager : IHostedService, IAsyncDisposable
 {
     private readonly ILogger<PresidioProcessManager> _logger;
-    private readonly string _scriptPath;
-    private readonly string _pythonExe;
+    private readonly IConfiguration _configuration;
+    private string _scriptPath = "";
+    private string _pythonExe = "";
 
     private Process? _process;
     private CancellationTokenSource? _cts;
@@ -32,10 +33,15 @@ public class PresidioProcessManager : IHostedService, IAsyncDisposable
     public PresidioProcessManager(ILogger<PresidioProcessManager> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
+        ResolvePaths();
+    }
 
+    private void ResolvePaths()
+    {
         // Configurable paths — fall back to probing
-        var configScript = configuration["Apex:Presidio:ScriptPath"];
-        var configPython = configuration["Apex:Presidio:PythonPath"];
+        var configScript = _configuration["Apex:Presidio:ScriptPath"];
+        var configPython = _configuration["Apex:Presidio:PythonPath"];
 
         _scriptPath = !string.IsNullOrEmpty(configScript) && File.Exists(configScript)
             ? configScript
@@ -51,6 +57,11 @@ public class PresidioProcessManager : IHostedService, IAsyncDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
+        // Re-resolve on every start attempt so a restart can pick up
+        // newly installed python or newly written config/script.
+        if (!File.Exists(_scriptPath) || string.IsNullOrEmpty(_pythonExe))
+            ResolvePaths();
+
         if (!File.Exists(_scriptPath))
         {
             _logger.LogWarning("Presidio script not found at {Path} — Presidio disabled", _scriptPath);
@@ -90,6 +101,11 @@ public class PresidioProcessManager : IHostedService, IAsyncDisposable
         _intentionallyStopped = false;
         _restartCount = 0;
         await KillProcessAsync();
+
+        // If the watcher never started (Disabled at boot) or has exited, re-enter StartAsync
+        // so a restart can recover once python/script are available or configured.
+        if (_watcherTask is null || _watcherTask.IsCompleted)
+            await StartAsync();
     }
 
     private async Task WatchAsync(CancellationToken ct)

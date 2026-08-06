@@ -28,15 +28,18 @@ public class LlmService : ILlmService
         _logger = logger;
     }
 
-    public async Task<string> GenerateAsync(string prompt, string? systemPrompt = null, double temperature = 0.3)
+    public async Task<string> GenerateAsync(string prompt, string? systemPrompt = null, double temperature = 0.3, bool jsonFormat = false)
     {
         var request = new Dictionary<string, object>
         {
             ["model"] = _model,
             ["prompt"] = prompt,
             ["stream"] = false,
-            ["options"] = new { temperature, num_predict = 4096 }
+            ["options"] = new { temperature, num_predict = 8192 }
         };
+
+        if (jsonFormat)
+            request["format"] = "json"; // grammar-constrained: Ollama guarantees syntactically valid JSON
 
         if (systemPrompt != null)
             request["system"] = systemPrompt;
@@ -63,7 +66,7 @@ public class LlmService : ILlmService
         // Append JSON instruction
         var jsonPrompt = prompt + "\n\nRespond with ONLY valid JSON, no markdown, no explanation.";
 
-        var raw = await GenerateAsync(jsonPrompt, systemPrompt, temperature);
+        var raw = await GenerateAsync(jsonPrompt, systemPrompt, temperature, jsonFormat: true);
         _logger.LogInformation("Raw Ollama JSON response ({Len} chars): {Raw}",
             raw.Length, raw[..Math.Min(1000, raw.Length)]);
 

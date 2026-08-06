@@ -9,7 +9,7 @@ public interface ILlmService
     /// <summary>
     /// Generate a completion from a prompt. Returns the raw text response.
     /// </summary>
-    Task<string> GenerateAsync(string prompt, string? systemPrompt = null, double temperature = 0.3);
+    Task<string> GenerateAsync(string prompt, string? systemPrompt = null, double temperature = 0.3, bool jsonFormat = false);
 
     /// <summary>
     /// Generate a structured JSON response from a prompt.

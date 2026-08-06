@@ -18,6 +18,10 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
 
+// Serve Blazor Dashboard static web assets from build output even in Production
+// (auto-enabled only in Development; no-op for published layouts with a real wwwroot)
+builder.WebHost.UseStaticWebAssets();
+
 // ── SQLite connection string (expands %PROGRAMDATA% et al.) ──────
 var rawConn = builder.Configuration.GetConnectionString("ApexDb")
     ?? "Data Source=%PROGRAMDATA%\\APEX\\apex.db";
@@ -67,7 +71,7 @@ builder.Services.AddSingleton<ITaskQueue, InMemoryTaskQueue>();
 builder.Services.AddTransient<IProjectSessionService, ProjectSessionService>();
 
 // ── Ollama HTTP client ────────────────────────────────────────────
-var ollamaUrl = builder.Configuration["Apex:Ollama:BaseUrl"] ?? "http://localhost:11434";
+var ollamaUrl = builder.Configuration["Apex:Ollama:BaseUrl"] ?? "http://127.0.0.1:11434";
 builder.Services.AddHttpClient("Ollama", client =>
 {
     client.BaseAddress = new Uri(ollamaUrl);
@@ -204,9 +208,15 @@ app.MapFallback(async context =>
         context.Response.StatusCode = 404;
         return;
     }
+    var index = app.Environment.WebRootFileProvider.GetFileInfo("index.html");
+    if (!index.Exists)
+    {
+        context.Response.StatusCode = 404;
+        await context.Response.WriteAsync("Dashboard assets not found. Rebuild the API or check the deployment layout.");
+        return;
+    }
     context.Response.ContentType = "text/html";
-    await context.Response.SendFileAsync(
-        app.Environment.WebRootFileProvider.GetFileInfo("index.html"));
+    await context.Response.SendFileAsync(index);
 });
 
 app.Lifetime.ApplicationStarted.Register(() =>

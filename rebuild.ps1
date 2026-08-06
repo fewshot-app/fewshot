@@ -1,8 +1,8 @@
 ﻿# API changes
 cd C:\Users\starkj\source\repos\jstarkwv\APEX\
 Stop-Service APEX
-dotnet build src\Apex.Api\Apex.Api.csproj -c Release
-if ($LASTEXITCODE -ne 0) { Write-Host "API build FAILED - service NOT restarted" -ForegroundColor Red; exit 1 }
+dotnet publish src\Apex.Api\Apex.Api.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\APEX\api"
+if ($LASTEXITCODE -ne 0) { Write-Host "API publish FAILED - service NOT restarted" -ForegroundColor Red; exit 1 }
 Start-Service APEX
 
 # MCP changes
