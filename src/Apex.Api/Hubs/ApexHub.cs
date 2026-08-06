@@ -17,11 +17,6 @@ public class ApexHub : Hub
 
 public static class ApexHubExtensions
 {
-    public static async Task SendTaskUpdate(this IHubContext<ApexHub> hub, int sessionId, string status, string detail)
-    {
-        await hub.Clients.Group($"session-{sessionId}").SendAsync("TaskUpdate", status, detail);
-    }
-
     /// <summary>
     /// Broadcasts to all dashboard clients when a session's consolidation status changes.
     /// </summary>

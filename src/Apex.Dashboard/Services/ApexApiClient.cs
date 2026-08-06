@@ -64,35 +64,9 @@ public class ApexApiClient
     public async Task DeleteAntiPatternAsync(int id) =>
         await _http.DeleteAsync($"/api/antipatterns/{id}");
 
-    // Tasks
-    public async Task<AgencyReadinessDto?> GetReadinessAsync() =>
-        await _http.GetFromJsonAsync<AgencyReadinessDto>("/api/tasks/readiness");
-
-    public async Task<List<TaskDto>> GetTasksBySessionAsync(int sessionId) =>
-        await _http.GetFromJsonAsync<List<TaskDto>>($"/api/tasks/session/{sessionId}") ?? [];
-
-    public async Task<List<TaskDto>> GetPendingApprovalAsync() =>
-        await _http.GetFromJsonAsync<List<TaskDto>>("/api/tasks/pending-approval") ?? [];
-
-    public async Task ApproveTaskAsync(int taskId) =>
-        await _http.PostAsync($"/api/tasks/{taskId}/approve", null);
-
-    public async Task RejectTaskAsync(int taskId, string reason) =>
-        await _http.PostAsJsonAsync($"/api/tasks/{taskId}/reject", new { reason });
-
     // Experiments
     public async Task<List<TokenResultDto>> GetTokenResultsAsync() =>
         await _http.GetFromJsonAsync<List<TokenResultDto>>("/api/experiments/tokens") ?? [];
-
-    // Thresholds
-    public async Task<ThresholdsDto?> GetThresholdsAsync() =>
-        await _http.GetFromJsonAsync<ThresholdsDto>("/api/tasks/thresholds");
-
-    public async Task<ThresholdsDto?> UpdateThresholdsAsync(UpdateThresholdsDto req)
-    {
-        var resp = await _http.PutAsJsonAsync("/api/tasks/thresholds", req);
-        return await resp.Content.ReadFromJsonAsync<ThresholdsDto>();
-    }
 
     // Projects
     public async Task<List<ProjectDto>> GetProjectsAsync() =>
@@ -188,6 +162,20 @@ public class ApexApiClient
         var json = await resp.Content.ReadAsStringAsync();
         return System.Text.Json.JsonSerializer.Deserialize<AuditResultDto>(json, options);
     }
+
+    // Audit allowlist
+    public async Task<List<string>> GetAuditAllowlistAsync() =>
+        await _http.GetFromJsonAsync<List<string>>("/api/audit/allowlist") ?? [];
+
+    public async Task<(List<string>? Patterns, string? Error)> UpdateAuditAllowlistAsync(List<string> patterns)
+    {
+        var resp = await _http.PutAsJsonAsync("/api/audit/allowlist", new { patterns });
+        if (resp.IsSuccessStatusCode)
+            return (await resp.Content.ReadFromJsonAsync<List<string>>() ?? [], null);
+
+        var body = await resp.Content.ReadAsStringAsync();
+        return (null, string.IsNullOrWhiteSpace(body) ? resp.StatusCode.ToString() : body);
+    }
 }
 
 // DTOs
@@ -227,39 +215,7 @@ public record AntiPatternDto(
     int AntiPatternId, int SessionId, string Pattern, string Reason,
     string? Language, string? ErrorCode, DateTime CreatedAt);
 
-public record TaskDto(
-    int TaskId, int SessionId, string TaskType, string Status,
-    string? Payload, string? Result, int AttemptCount, int MaxAttempts,
-    string? LastError, bool RequiresApproval, DateTime CreatedAt, DateTime? CompletedAt);
-
-public record AgencyReadinessDto(
-    bool IsReady, int SuggestionsLogged, int SuggestionsRequired,
-    double ExplicitFeedbackRate, double FeedbackRateRequired,
-    int AntiPatternSuppressions, int SuppressionsRequired,
-    int ConsolidatedSessions, int ConsolidatedSessionsRequired,
-    List<string> BlockingReasons, List<string>? Warnings = null);
-
 public record TokenResultDto(string Tier, string Format, int AvgTokens, int SessionCount);
-
-public class ThresholdsDto
-{
-    public int MinSuggestions { get; set; }
-    public double MinFeedbackRate { get; set; }
-    public int MinAntiPatternSuppressions { get; set; }
-    public int MinConsolidatedSessions { get; set; }
-    public int RecommendedSuggestions { get; set; }
-    public double RecommendedFeedbackRate { get; set; }
-    public int RecommendedSuppressions { get; set; }
-    public int RecommendedConsolidatedSessions { get; set; }
-}
-
-public class UpdateThresholdsDto
-{
-    public int? MinSuggestions { get; set; }
-    public double? MinFeedbackRate { get; set; }
-    public int? MinAntiPatternSuppressions { get; set; }
-    public int? MinConsolidatedSessions { get; set; }
-}
 
 public class AuditResultDto
 {

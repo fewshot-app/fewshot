@@ -8,8 +8,6 @@ public class ApexSignalRService : IAsyncDisposable
     private readonly string _hubUrl;
 
     public event Action<int, string, string>? OnSessionUpdate;
-    public event Action<int, string, string>? OnTaskUpdate;
-
     public HubConnectionState State => _connection?.State ?? HubConnectionState.Disconnected;
     public bool IsConnected => State == HubConnectionState.Connected;
 
@@ -30,9 +28,6 @@ public class ApexSignalRService : IAsyncDisposable
 
         _connection.On<int, string, string>("SessionUpdate", (sessionId, status, summary) =>
             OnSessionUpdate?.Invoke(sessionId, status, summary));
-
-        _connection.On<int, string, string>("TaskUpdate", (sessionId, status, detail) =>
-            OnTaskUpdate?.Invoke(sessionId, status, detail));
 
         _connection.Reconnected += _ => { NotifyStateChanged(); return Task.CompletedTask; };
         _connection.Closed += _ => { NotifyStateChanged(); return Task.CompletedTask; };

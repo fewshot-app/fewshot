@@ -16,6 +16,7 @@ public class AuditService : IAuditService
 {
     private readonly ApexDbContext _db;
     private readonly HttpClient _presidioClient;
+    private readonly IAuditAllowlistProvider _allowlist;
 
     // Stage 1: High-specificity regex patterns (near-zero false positive rate)
     private static readonly (string Name, Regex Pattern)[] RegexPatterns =
@@ -35,10 +36,11 @@ public class AuditService : IAuditService
     private static readonly Regex EntropyTokenPattern =
         new($@"[A-Za-z0-9\-._~+/=]{{{MinTokenLength},}}", RegexOptions.Compiled);
 
-    public AuditService(ApexDbContext db, IHttpClientFactory httpClientFactory)
+    public AuditService(ApexDbContext db, IHttpClientFactory httpClientFactory, IAuditAllowlistProvider allowlist)
     {
         _db = db;
         _presidioClient = httpClientFactory.CreateClient("Presidio");
+        _allowlist = allowlist;
     }
 
     public async Task<AuditPipelineResult> AnalyzeAsync(string content, int sessionId)
@@ -75,6 +77,17 @@ public class AuditService : IAuditService
         // Stage 3: Shannon entropy on long tokens in code blocks
         var entropyFindings = AnalyzeEntropy(content);
         findings.AddRange(entropyFindings);
+
+        // Allowlist: drop findings fully contained in a user-allowlisted region.
+        // Explicit allowlist beats detection across all stages.
+        if (findings.Count > 0)
+        {
+            var allowed = await _allowlist.GetMatchRangesAsync(content);
+            if (allowed.Count > 0)
+                findings = findings
+                    .Where(f => !allowed.Any(r => f.StartIndex >= r.Start && f.StartIndex + f.Length <= r.End))
+                    .ToList();
+        }
 
         // Determine verdict
         var hasBlockingFinding = findings.Any(f => f.Confidence >= 0.95 &&

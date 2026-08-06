@@ -15,8 +15,6 @@ public class ApexDbContext : DbContext
     public DbSet<Outcome> Outcomes => Set<Outcome>();
     public DbSet<Preference> Preferences => Set<Preference>();
     public DbSet<AntiPattern> AntiPatterns => Set<AntiPattern>();
-    public DbSet<ApexTask> Tasks => Set<ApexTask>();
-    public DbSet<TaskStep> TaskSteps => Set<TaskStep>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Experiment> Experiments => Set<Experiment>();
     public DbSet<ExperimentAssignment> ExperimentAssignments => Set<ExperimentAssignment>();
@@ -87,29 +85,6 @@ public class ApexDbContext : DbContext
             e.Property(x => x.Language).HasMaxLength(50);
             e.Property(x => x.ErrorCode).HasMaxLength(100);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("datetime('now')");
-        });
-
-        m.Entity<ApexTask>(e =>
-        {
-            e.ToTable("Tasks");
-            e.HasKey(x => x.TaskId);
-            e.Property(x => x.TaskType).HasMaxLength(50);
-            e.Property(x => x.Status).HasMaxLength(20).HasDefaultValue("Queued");
-            e.Property(x => x.MaxAttempts).HasDefaultValue(3);
-            e.Property(x => x.AttemptCount).HasDefaultValue(0);
-            e.Property(x => x.RequiresApproval).HasDefaultValue(false);
-            e.Property(x => x.LockedBy).HasMaxLength(100);
-            e.Property(x => x.CreatedAt).HasDefaultValueSql("datetime('now')");
-        });
-
-        m.Entity<TaskStep>(e =>
-        {
-            e.HasKey(x => x.StepId);
-            e.Property(x => x.StepName).HasMaxLength(100);
-            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).HasDefaultValue(TaskStepStatus.Pending);
-            e.Property(x => x.FilePath).HasMaxLength(500);
-            e.Property(x => x.StartedAt).HasDefaultValueSql("datetime('now')");
-            e.HasIndex(x => x.TaskId);
         });
 
         m.Entity<AuditLog>(e =>
