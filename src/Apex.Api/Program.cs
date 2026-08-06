@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
 using Apex.Api.Hubs;
 using Apex.Api.Jobs;
 using Apex.Core.Interfaces;
+using Apex.Core.Models;
 using Apex.Infrastructure.Audit;
 using Apex.Infrastructure.Context;
 using Apex.Infrastructure.Data;
@@ -46,11 +48,7 @@ builder.Services.AddTransient<IOutcomeService, OutcomeService>();
 builder.Services.AddTransient<IPreferenceService, PreferenceService>();
 builder.Services.AddTransient<IAntiPatternService, AntiPatternService>();
 builder.Services.AddTransient<IAuditService, AuditService>();
-builder.Services.AddTransient<ITaskService, TaskService>();
-
-var gateOptions = builder.Configuration.GetSection(AgencyGateOptions.SectionName).Get<AgencyGateOptions>() ?? new AgencyGateOptions();
-builder.Services.AddSingleton(gateOptions);
-builder.Services.AddTransient<IAgencyGate, AgencyGate>();
+builder.Services.AddSingleton<IAuditAllowlistProvider, AuditAllowlistProvider>();
 
 // ── Context injection ─────────────────────────────────────────────
 builder.Services.AddSingleton<AclFormatter>();
@@ -65,9 +63,8 @@ builder.Services.AddTransient<IExperimentService, ExperimentService>();
 builder.Services.AddSingleton<PresidioProcessManager>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PresidioProcessManager>());
 
-// ── In-process cache + task queue (no Redis) ──────────────────────
+// ── In-process cache (no Redis) ───────────────────────────────────
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<ITaskQueue, InMemoryTaskQueue>();
 builder.Services.AddTransient<IProjectSessionService, ProjectSessionService>();
 
 // ── Ollama HTTP client ────────────────────────────────────────────
@@ -156,20 +153,24 @@ using (var scope = app.Services.CreateScope())
         await db.Database.EnsureCreatedAsync();
     }
 
-    // Load persisted gate thresholds
-    try
+    // Seed default audit allowlist on first run (user profile paths + env tokens)
+    if (!await db.SystemSettings.AnyAsync(s => s.Key == AuditAllowlistProvider.SettingKey))
     {
-        var settings = await db.SystemSettings.ToDictionaryAsync(s => s.Key, s => s.Value);
-        if (settings.TryGetValue("AgencyGate:MinSuggestions", out var ms))
-            gateOptions.MinSuggestions = int.Parse(ms);
-        if (settings.TryGetValue("AgencyGate:MinFeedbackRate", out var fr))
-            gateOptions.MinFeedbackRate = double.Parse(fr);
-        if (settings.TryGetValue("AgencyGate:MinAntiPatternSuppressions", out var ap))
-            gateOptions.MinAntiPatternSuppressions = int.Parse(ap);
-        if (settings.TryGetValue("AgencyGate:MinConsolidatedSessions", out var cs))
-            gateOptions.MinConsolidatedSessions = int.Parse(cs);
+        db.SystemSettings.Add(new SystemSetting
+        {
+            Key = AuditAllowlistProvider.SettingKey,
+            Value = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                Regex.Escape(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "\\"),
+                Regex.Escape("%LOCALAPPDATA%"),
+                Regex.Escape("%APPDATA%"),
+                Regex.Escape("%PROGRAMDATA%")
+            }),
+            UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
     }
-    catch { /* first run */ }
+
 }
 
 if (app.Environment.IsDevelopment() ||

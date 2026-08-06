@@ -33,40 +33,6 @@ else
         </div>
     </div>
 
-    <!-- Agency Readiness -->
-    <div class="card">
-        <div class="card-title">Agency Readiness</div>
-        @if (_readiness != null)
-        {
-            <div class="flex items-center gap-1 mb-2">
-                @if (_readiness.IsReady)
-                {
-                    <span class="badge badge-success">READY</span>
-                }
-                else
-                {
-                    <span class="badge badge-warning">NOT READY</span>
-                }
-            </div>
-
-            <GateProgress Label="Suggestions" Current="@_readiness.SuggestionsLogged" Required="@_readiness.SuggestionsRequired" />
-            <GateProgress Label="Feedback Rate" Current="@((int)(_readiness.ExplicitFeedbackRate * 100))" Required="@((int)(_readiness.FeedbackRateRequired * 100))" Suffix="%" />
-            <GateProgress Label="Anti-Pattern Suppressions" Current="@_readiness.AntiPatternSuppressions" Required="@_readiness.SuppressionsRequired" />
-            <GateProgress Label="Consolidated Sessions" Current="@_readiness.ConsolidatedSessions" Required="@_readiness.ConsolidatedSessionsRequired" />
-
-            @if (_readiness.Warnings?.Any() == true)
-            {
-                <div class="mt-2" style="padding:0.75rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:0.375rem">
-                    <div class="text-warning text-sm" style="font-weight:600;margin-bottom:0.35rem">⚠ Below Recommended Thresholds</div>
-                    @foreach (var w in _readiness.Warnings)
-                    {
-                        <div class="text-sm" style="color:var(--text-secondary);margin-bottom:0.2rem">• @w</div>
-                    }
-                </div>
-            }
-        }
-    </div>
-
     <!-- Recent Sessions -->
     <div class="card">
         <div class="card-title">Recent Sessions</div>
@@ -170,7 +136,6 @@ else
     private List<SessionDto> _sessions = [];
     private List<PreferenceDto> _preferences = [];
     private List<AntiPatternDto> _antiPatterns = [];
-    private AgencyReadinessDto? _readiness;
     private HealthStatus? _health;
     private PresidioStatusDto? _presidio;
     private bool _loading = true;
@@ -183,10 +148,9 @@ else
             var t1 = Api.GetSessionsAsync().ContinueWith(t => _sessions = t.Result);
             var t2 = Api.GetPreferencesAsync().ContinueWith(t => _preferences = t.Result);
             var t3 = Api.GetAntiPatternsAsync().ContinueWith(t => _antiPatterns = t.Result);
-            var t4 = Api.GetReadinessAsync().ContinueWith(t => _readiness = t.Result);
-            var t5 = Api.GetHealthAsync().ContinueWith(t => _health = t.Result);
-            var t6 = Api.GetPresidioStatusAsync().ContinueWith(t => _presidio = t.Result);
-            await Task.WhenAll(t1, t2, t3, t4, t5, t6);
+            var t4 = Api.GetHealthAsync().ContinueWith(t => _health = t.Result);
+            var t5 = Api.GetPresidioStatusAsync().ContinueWith(t => _presidio = t.Result);
+            await Task.WhenAll(t1, t2, t3, t4, t5);
         }
         catch (Exception ex)
         {
@@ -195,7 +159,6 @@ else
         _loading = false;
 
         SignalR.OnSessionUpdate += HandleSessionUpdate;
-        SignalR.OnTaskUpdate += HandleTaskUpdate;
     }
 
     private void HandleSessionUpdate(int sessionId, string status, string summary)
@@ -209,17 +172,6 @@ else
                 if (idx >= 0) _sessions[idx] = updated;
                 else _sessions.Insert(0, updated);
             }
-            // Refresh readiness since consolidated session count changed
-            _readiness = await Api.GetReadinessAsync();
-            StateHasChanged();
-        });
-    }
-
-    private void HandleTaskUpdate(int sessionId, string status, string detail)
-    {
-        InvokeAsync(async () =>
-        {
-            _readiness = await Api.GetReadinessAsync();
             StateHasChanged();
         });
     }
@@ -254,6 +206,5 @@ else
     public void Dispose()
     {
         SignalR.OnSessionUpdate -= HandleSessionUpdate;
-        SignalR.OnTaskUpdate -= HandleTaskUpdate;
     }
 }
