@@ -198,7 +198,7 @@ public class HealthStatus
 }
 
 public record SessionDto(
-    int SessionId, DateTime StartTime, DateTime? EndTime, bool IsConsolidated,
+    int SessionId, string? Project, DateTime StartTime, DateTime? EndTime, bool IsConsolidated,
     DateTime? ConsolidatedAt, string? ConsolidationSummary, string? ConsolidationError);
 
 public record MemoryDto(

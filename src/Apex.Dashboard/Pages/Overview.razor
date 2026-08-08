@@ -6,6 +6,14 @@
 <div class="page-header">
     <h1 class="page-title">APEX Dashboard</h1>
     <p class="page-subtitle">Adaptive Personalized EXperience — System Overview</p>
+    @if (!_loading)
+    {
+        var pending = _sessions.Count(s => s.EndTime.HasValue && !s.IsConsolidated && s.ConsolidationError == null);
+        @if (pending > 0)
+        {
+            <span class="badge badge-warning">Consolidation: @pending pending</span>
+        }
+    }
 </div>
 
 @if (_loading)
