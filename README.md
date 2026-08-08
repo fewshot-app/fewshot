@@ -1,4 +1,4 @@
-# StarkTrace — Adaptive Personalized EXperience
+# StarkTrace — AI Session Audit & Memory
 
 **Your AI memory. Your machine. Nobody else's.**
 

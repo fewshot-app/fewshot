@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    StarkTrace installer -- Adaptive Personalized EXperience
+    StarkTrace installer -- AI Session Audit & Memory
 .DESCRIPTION
     Downloads the latest StarkTrace release, installs Ollama (if needed),
     installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
@@ -129,7 +129,7 @@ function Invoke-OllamaPull {
 # ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
-Write-Host "  |   StarkTrace -- Adaptive Personalized EXperience |" -ForegroundColor DarkCyan
+Write-Host "  |   StarkTrace -- AI Session Audit & Memory |" -ForegroundColor DarkCyan
 Write-Host "  |           Installer v1.4                    |" -ForegroundColor DarkCyan
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
 Write-Host ""
