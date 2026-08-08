@@ -96,48 +96,6 @@ else
         }
     </div>
 
-    <!-- Presidio -->
-    <div class="card">
-        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
-            <span>Presidio PII Detection</span>
-            <div class="flex gap-1">
-                <button class="btn btn-sm" @onclick="PresidioRestartAsync" disabled="@_presidioBusy">Restart</button>
-                @if (_presidio?.Status == "Stopped" || _presidio?.Status == "Disabled")
-                {
-                    <button class="btn btn-sm btn-primary" @onclick="PresidioStartAsync" disabled="@_presidioBusy">Start</button>
-                }
-                else
-                {
-                    <button class="btn btn-sm btn-danger" @onclick="PresidioStopAsync" disabled="@_presidioBusy">Stop</button>
-                }
-            </div>
-        </div>
-        @if (_presidio != null)
-        {
-            <div class="flex flex-wrap gap-1 mb-1">
-                <span class="badge @(_presidio.Status == "Running" ? "badge-success" : _presidio.Status is "Starting" or "Restarting" ? "badge-warning" : "badge-danger")">
-                    @_presidio.Status
-                </span>
-                @if (_presidio.Pid.HasValue)
-                {
-                    <span class="badge">PID @_presidio.Pid</span>
-                }
-                @if (_presidio.RestartCount > 0)
-                {
-                    <span class="badge badge-warning">@_presidio.RestartCount restarts</span>
-                }
-            </div>
-            @if (_presidio.UptimeSeconds.HasValue)
-            {
-                var uptime = TimeSpan.FromSeconds(_presidio.UptimeSeconds.Value);
-                <div class="text-sm text-muted">Uptime: @uptime.ToString(@"hh\:mm\:ss")</div>
-            }
-            @if (_presidio.Status == "Disabled")
-            {
-                <div class="text-sm text-muted mt-1">Python or presidio script not found. Run the installer to enable PII detection.</div>
-            }
-        }
-    </div>
 }
 
 @code {
@@ -145,9 +103,7 @@ else
     private List<PreferenceDto> _preferences = [];
     private List<AntiPatternDto> _antiPatterns = [];
     private HealthStatus? _health;
-    private PresidioStatusDto? _presidio;
     private bool _loading = true;
-    private bool _presidioBusy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,8 +113,7 @@ else
             var t2 = Api.GetPreferencesAsync().ContinueWith(t => _preferences = t.Result);
             var t3 = Api.GetAntiPatternsAsync().ContinueWith(t => _antiPatterns = t.Result);
             var t4 = Api.GetHealthAsync().ContinueWith(t => _health = t.Result);
-            var t5 = Api.GetPresidioStatusAsync().ContinueWith(t => _presidio = t.Result);
-            await Task.WhenAll(t1, t2, t3, t4, t5);
+            await Task.WhenAll(t1, t2, t3, t4);
         }
         catch (Exception ex)
         {
@@ -182,33 +137,6 @@ else
             }
             StateHasChanged();
         });
-    }
-
-    private async Task PresidioStartAsync()
-    {
-        _presidioBusy = true;
-        await Api.PresidioStartAsync();
-        await Task.Delay(2000);
-        _presidio = await Api.GetPresidioStatusAsync();
-        _presidioBusy = false;
-    }
-
-    private async Task PresidioStopAsync()
-    {
-        _presidioBusy = true;
-        await Api.PresidioStopAsync();
-        await Task.Delay(500);
-        _presidio = await Api.GetPresidioStatusAsync();
-        _presidioBusy = false;
-    }
-
-    private async Task PresidioRestartAsync()
-    {
-        _presidioBusy = true;
-        await Api.PresidioRestartAsync();
-        await Task.Delay(2500);
-        _presidio = await Api.GetPresidioStatusAsync();
-        _presidioBusy = false;
     }
 
     public void Dispose()

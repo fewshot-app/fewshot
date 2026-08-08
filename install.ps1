@@ -23,62 +23,6 @@ $OllamaChat   = 'gemma4'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-function Write-PresidioScript {
-    param([string]$OutPath)
-    $py = @'
-"""Presidio HTTP server for Fewshot -- listens on port 3000."""
-import json, sys
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
-
-analyzer = AnalyzerEngine()
-anonymizer = AnonymizerEngine()
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"healthy"}')
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
-        text = body.get("text", "")
-        language = body.get("language", "en")
-
-        if self.path == "/analyze":
-            results = analyzer.analyze(text=text, language=language)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps([r.to_dict() for r in results]).encode())
-        elif self.path == "/anonymize":
-            results = analyzer.analyze(text=text, language=language)
-            anon = anonymizer.anonymize(text=text, analyzer_results=results)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"text": anon.text}).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass  # Suppress request logging
-
-if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
-    print(f"Presidio server listening on http://127.0.0.1:{port}")
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
-'@
-    $py | Set-Content $OutPath -Encoding UTF8
-}
 function Write-Step  { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
 function Write-Ok    { param($msg) Write-Host "      [OK] $msg" -ForegroundColor Green }
 function Write-Warn  { param($msg) Write-Host "      [WARN] $msg" -ForegroundColor Yellow }
@@ -243,53 +187,13 @@ Write-Host ""
 Write-Host "      [Required] API + MCP Server (core)" -ForegroundColor White
 Write-Host ""
 
-$pythonExe = Get-Command python -ErrorAction SilentlyContinue
-if (-not $pythonExe) { $pythonExe = Get-Command python3 -ErrorAction SilentlyContinue }
-
 $installDashboard = Read-Host "      Install Dashboard -- web UI for memories/sessions? [Y/n]"
 $installDashboard = $installDashboard -ne 'n' -and $installDashboard -ne 'N'
-
-if ($pythonExe) {
-    $installPresidio = Read-Host "      Install Presidio -- ML-based PII detection? [Y/n]"
-    $installPresidio = $installPresidio -ne 'n' -and $installPresidio -ne 'N'
-} else {
-    $installPresidio = $false
-}
 
 Write-Host ""
 $components = @("API", "MCP")
 if ($installDashboard) { $components += "Dashboard" }
-if ($installPresidio)  { $components += "Presidio" }
 Write-Ok "Components: $($components -join ', ')"
-
-# ── Presidio PII detection (optional) ──────────────────────────────────────────
-if ($installPresidio) {
-    Write-Step "Installing Presidio PII detection"
-    Write-Host "      Python found at $($pythonExe.Source)" -ForegroundColor Gray
-    Write-Host "      Installing Presidio (this may take a minute)..." -ForegroundColor Gray
-    try {
-        $pipProc = Start-Process -FilePath $pythonExe.Source -ArgumentList "-m pip install presidio-analyzer presidio-anonymizer --quiet" -NoNewWindow -Wait -PassThru
-        if ($pipProc.ExitCode -eq 0) {
-            $spacyProc = Start-Process -FilePath $pythonExe.Source -ArgumentList "-m spacy download en_core_web_lg --quiet" -NoNewWindow -Wait -PassThru
-            if ($spacyProc.ExitCode -eq 0) {
-                Write-Ok "Presidio installed with spaCy model"
-            } else {
-                Write-Warn "Presidio installed but spaCy model download failed -- run: python -m spacy download en_core_web_lg"
-            }
-        } else {
-            Write-Warn "Presidio install failed -- Fewshot will use built-in regex PII scanning"
-        }
-    } catch {
-        Write-Warn "Presidio install failed: $_ -- Fewshot will use built-in regex PII scanning"
-    }
-
-    $presidioScript = "$InstallDir\presidio\serve.py"
-    New-Item -ItemType Directory -Force -Path "$InstallDir\presidio" | Out-Null
-    Write-PresidioScript $presidioScript
-
-    Write-Ok "Presidio server script saved to $presidioScript"
-    Write-Host "      To start: python `"$presidioScript`"" -ForegroundColor Gray
-}
 
 # ── Stop running Fewshot processes ────────────────────────────────────────────────
 Write-Step "Stopping running Fewshot processes (if any)"
@@ -537,9 +441,6 @@ Write-Host "   Swagger:    http://localhost:$ApiPort/swagger" -ForegroundColor W
 Write-Host "   Hangfire:   http://localhost:$ApiPort/hangfire" -ForegroundColor White
 if ($installDashboard) {
     Write-Host "   Dashboard:  http://localhost:$ApiPort" -ForegroundColor White
-}
-if (Test-Path "$InstallDir\presidio\serve.py") {
-    Write-Host "   Presidio:   python `"$InstallDir\presidio\serve.py`"" -ForegroundColor White
 }
 Write-Host ""
 Write-Host "   Next steps:" -ForegroundColor Yellow

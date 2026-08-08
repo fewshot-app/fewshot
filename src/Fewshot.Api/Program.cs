@@ -59,10 +59,6 @@ builder.Services.AddTransient<IContextInjector, ContextInjector>();
 // ── Experiments ───────────────────────────────────────────────────
 builder.Services.AddTransient<IExperimentService, ExperimentService>();
 
-// ── Presidio process manager ──────────────────────────────────────
-builder.Services.AddSingleton<PresidioProcessManager>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<PresidioProcessManager>());
-
 // ── In-process cache (no Redis) ───────────────────────────────────
 builder.Services.AddMemoryCache();
 builder.Services.AddTransient<IProjectSessionService, ProjectSessionService>();
@@ -237,14 +233,6 @@ app.MapGet("/health", async (IHttpClientFactory httpFactory, IConfiguration conf
 
     try
     {
-        var presidioClient = httpFactory.CreateClient("Presidio");
-        var response = await presidioClient.GetAsync("/health");
-        checks["presidio"] = new { status = response.IsSuccessStatusCode ? "healthy" : "degraded" };
-    }
-    catch { checks["presidio"] = new { status = "offline" }; }
-
-    try
-    {
         var http = httpFactory.CreateClient();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var response = await http.GetAsync($"{ollamaUrl}/api/tags", cts.Token);
@@ -258,11 +246,11 @@ app.MapGet("/health", async (IHttpClientFactory httpFactory, IConfiguration conf
     return Results.Ok(new
     {
         status = allHealthy ? "healthy" : "degraded",
-        version = "2.0",
+        version = "0.1",
         services = checks,
         warnings = checks
             .Where(kv => kv.Value.GetType().GetProperty("status")?.GetValue(kv.Value)?.ToString() != "healthy")
-            .Select(kv => $"{kv.Key} is not available — running without {(kv.Key == "presidio" ? "PII detection" : kv.Key)}")
+            .Select(kv => $"{kv.Key} is not available — running without {kv.Key}")
             .ToList()
     });
 });

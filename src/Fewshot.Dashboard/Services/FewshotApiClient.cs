@@ -119,28 +119,6 @@ public class FewshotApiClient
         return result?.Key;
     }
 
-    // Presidio
-    public async Task<PresidioStatusDto?> GetPresidioStatusAsync()
-    {
-        try
-        {
-            var resp = await _http.GetAsync("/api/presidio/status");
-            if (!resp.IsSuccessStatusCode ||
-                resp.Content.Headers.ContentType?.MediaType != "application/json")
-                return null;
-            return await resp.Content.ReadFromJsonAsync<PresidioStatusDto>();
-        }
-        catch { return null; }
-    }
-
-    public async Task PresidioStartAsync() =>
-        await _http.PostAsync("/api/presidio/start", null);
-
-    public async Task PresidioStopAsync() =>
-        await _http.PostAsync("/api/presidio/stop", null);
-
-    public async Task PresidioRestartAsync() =>
-        await _http.PostAsync("/api/presidio/restart", null);
 
     // Audit
     public async Task<AuditResultDto?> AnalyzeAsync(string content)
@@ -277,6 +255,5 @@ public class PackValidationResultDto
 }
 
 public record MachineIdDto(string MachineId);
-public record PresidioStatusDto(string Status, int? Pid, int RestartCount, int? UptimeSeconds);
 public record KeygenDto(string Key);
 
