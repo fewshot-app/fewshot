@@ -3,15 +3,15 @@
 .SYNOPSIS
     StarkTrace uninstaller
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/APEX/main/uninstall.ps1 | iex
+    irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/main/uninstall.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ServiceName = 'APEX'
-$InstallDir  = "$env:LOCALAPPDATA\APEX"
-$DataDir     = "$env:PROGRAMDATA\APEX"
+$ServiceName = 'StarkTrace'
+$InstallDir  = "$env:LOCALAPPDATA\StarkTrace"
+$DataDir     = "$env:PROGRAMDATA\StarkTrace"
 
 function Write-Step { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
 function Write-Ok   { param($msg) Write-Host "      [OK] $msg" -ForegroundColor Green }
@@ -49,7 +49,7 @@ if (Test-Admin) {
     }
 } else {
     Write-Warn "Not running as Administrator -- cannot remove Windows Service."
-    Write-Warn "Run 'sc delete APEX' as Administrator to remove it manually."
+    Write-Warn "Run 'sc delete StarkTrace' as Administrator to remove it manually."
 }
 
 # ── Remove from PATH ───────────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ if (Test-Path $claudeConfigFile) {
 Write-Step "Removing install directory"
 if (Test-Path $InstallDir) {
     if ($keepData) {
-        Write-Host "      Keeping database at $DataDir\apex.db" -ForegroundColor Gray
+        Write-Host "      Keeping database at $DataDir\starktrace.db" -ForegroundColor Gray
         Remove-Item -Recurse -Force "$InstallDir\api"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\mcp"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\dashboard" -ErrorAction SilentlyContinue

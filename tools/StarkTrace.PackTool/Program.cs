@@ -39,8 +39,8 @@ int PrintUsage()
     Usage:
       starktrace-pack new <pack-id> <name> <project> [-o output.json]
       starktrace-pack validate <file.json>
-      starktrace-pack encrypt <file.json> --key <base64-key> [-o output.apexpack]
-      starktrace-pack decrypt <file.apexpack> --key <base64-key> [-o output.json]
+      starktrace-pack encrypt <file.json> --key <base64-key> [-o output.starktracepack]
+      starktrace-pack decrypt <file.starktracepack> --key <base64-key> [-o output.json]
       starktrace-pack keygen
       starktrace-pack machine-id
 
@@ -103,7 +103,7 @@ int NewPack(string[] args)
     };
 
     var json = PackCrypto.SerializePack(pack);
-    var outputPath = GetArg(args, "-o") ?? $"{args[1]}.apexpack.json";
+    var outputPath = GetArg(args, "-o") ?? $"{args[1]}.starktracepack.json";
     File.WriteAllText(outputPath, json);
     Console.WriteLine($"Created pack template: {outputPath}");
     return 0;
@@ -136,7 +136,7 @@ int Encrypt(string[] args)
 {
     if (args.Length < 2)
     {
-        Console.Error.WriteLine("Usage: starktrace-pack encrypt <file.json> --key <base64-key> [-o output.apexpack]");
+        Console.Error.WriteLine("Usage: starktrace-pack encrypt <file.json> --key <base64-key> [-o output.starktracepack]");
         return 1;
     }
 
@@ -146,7 +146,7 @@ int Encrypt(string[] args)
     var envelope = PackCrypto.Encrypt(pack, key);
     var envelopeJson = PackCrypto.SerializeEnvelope(envelope);
 
-    var outputPath = GetArg(args, "-o") ?? Path.ChangeExtension(args[1], ".apexpack");
+    var outputPath = GetArg(args, "-o") ?? Path.ChangeExtension(args[1], ".starktracepack");
     File.WriteAllText(outputPath, envelopeJson);
     Console.WriteLine($"Encrypted: {outputPath} (SHA256: {envelope.Hash[..16]}...)");
     return 0;
@@ -156,7 +156,7 @@ int Decrypt(string[] args)
 {
     if (args.Length < 2)
     {
-        Console.Error.WriteLine("Usage: starktrace-pack decrypt <file.apexpack> --key <base64-key> [-o output.json]");
+        Console.Error.WriteLine("Usage: starktrace-pack decrypt <file.starktracepack> --key <base64-key> [-o output.json]");
         return 1;
     }
 

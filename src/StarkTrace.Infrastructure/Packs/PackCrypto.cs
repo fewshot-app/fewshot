@@ -6,7 +6,7 @@ using StarkTrace.Core.Models;
 namespace StarkTrace.Infrastructure.Packs;
 
 /// <summary>
-/// AES-256-CBC encryption/decryption for .apexpack files.
+/// AES-256-CBC encryption/decryption for .starktracepack files.
 /// Envelope includes SHA256 integrity hash of plaintext.
 /// </summary>
 public static class PackCrypto
@@ -53,7 +53,7 @@ public static class PackCrypto
 
         return new EncryptedPackEnvelope
         {
-            Format = "apexpack-v2",
+            Format = "starktracepack-v2",
             PackId = pack.PackId,
             Cipher = "AES-256-GCM",
             Iv = Convert.ToBase64String(nonce),
@@ -75,7 +75,7 @@ public static class PackCrypto
         byte[] plaintextBytes;
         switch (envelope.Format)
         {
-            case "apexpack-v2":
+            case "starktracepack-v2":
             {
                 const int tagLength = 16;
                 if (data.Length < tagLength)
@@ -94,7 +94,7 @@ public static class PackCrypto
                 }
                 break;
             }
-            case "apexpack-v1":
+            case "starktracepack-v1":
             {
                 // Legacy CBC packs exported before v2
                 using var aes = Aes.Create();

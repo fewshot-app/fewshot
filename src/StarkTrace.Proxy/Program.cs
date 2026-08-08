@@ -24,7 +24,7 @@ using Microsoft.Win32.SafeHandles;
 
 // Shadow-copy: run from temp so the install directory is never locked
 // This allows updates/uninstalls without quitting Claude Desktop.
-if (Environment.GetEnvironmentVariable("APEX_PROXY_SHADOW") != "1")
+if (Environment.GetEnvironmentVariable("STARKTRACE_PROXY_SHADOW") != "1")
 {
     var src = Environment.ProcessPath!;
     var shadowDir = Path.Combine(Path.GetTempPath(), "starktrace-proxy", Path.GetRandomFileName());
@@ -46,7 +46,7 @@ if (Environment.GetEnvironmentVariable("APEX_PROXY_SHADOW") != "1")
     };
     // Pass through all original args
     foreach (var a in args) shadowPsi.ArgumentList.Add(a);
-    shadowPsi.Environment["APEX_PROXY_SHADOW"] = "1";
+    shadowPsi.Environment["STARKTRACE_PROXY_SHADOW"] = "1";
 
     using var shadow = Process.Start(shadowPsi)!;
 
@@ -102,7 +102,7 @@ if (string.IsNullOrEmpty(serverExe))
     return 1;
 }
 
-var starktraceApiBase = Environment.GetEnvironmentVariable("APEX_API_URL") ?? "http://localhost:5000";
+var starktraceApiBase = Environment.GetEnvironmentVariable("STARKTRACE_API_URL") ?? "http://localhost:5000";
 Console.Error.WriteLine($"[StarkTrace-PROXY] Starting. Server: {serverExe}. StarkTrace: {starktraceApiBase}");
 
 // ── Spawn the real MCP server ─────────────────────────────────────────────────

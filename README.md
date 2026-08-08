@@ -145,7 +145,7 @@ One proxy instance per MCP server. Each instance logs findings independently to 
 ## Install
 
 ```powershell
-irm https://raw.githubusercontent.com/jstarkwv/APEX/feature/no-docker/install.ps1 | iex
+irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/feature/no-docker/install.ps1 | iex
 ```
 
 The installer checks prerequisites, pulls Ollama models, installs as a Windows Service, and wires up Claude Desktop automatically.
@@ -164,8 +164,8 @@ ollama pull gemma4
 ### 2. Clone and build
 
 ```bash
-git clone https://github.com/jstarkwv/APEX.git
-cd APEX
+git clone https://github.com/jstarkwv/StarkTrace.git
+cd StarkTrace
 dotnet build
 ```
 
@@ -175,7 +175,7 @@ dotnet build
 dotnet run --project src/StarkTrace.Api
 ```
 
-Creates `%PROGRAMDATA%\APEX\apex.db` on first run. No migrations needed.
+Creates `%PROGRAMDATA%\StarkTrace\starktrace.db` on first run. No migrations needed.
 
 ### 4. Configure Claude Desktop
 
@@ -185,7 +185,7 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 {
   "mcpServers": {
     "starktrace": {
-      "command": "C:\\path\\to\\APEX\\src\\StarkTrace.Mcp\\bin\\Release\\net8.0\\StarkTrace.Mcp.exe",
+      "command": "C:\\path\\to\\StarkTrace\\src\\StarkTrace.Mcp\\bin\\Release\\net8.0\\StarkTrace.Mcp.exe",
       "args": []
     }
   }
@@ -278,8 +278,8 @@ docker run -p 3000:3000 mcr.microsoft.com/presidio-analyzer:latest
 
 ```bash
 dotnet publish src/StarkTrace.Api -r win-x64 --self-contained -o publish/
-sc create APEX binPath="C:\path\to\publish\StarkTrace.Api.exe" start=auto
-sc start APEX
+sc create StarkTrace binPath="C:\path\to\publish\StarkTrace.Api.exe" start=auto
+sc start StarkTrace
 ```
 
 ---

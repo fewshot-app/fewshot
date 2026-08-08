@@ -19,7 +19,7 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 | Component | Technology | Notes |
 |-----------|-----------|-------|
 | API | .NET 8 Web API | Windows Service via `sc create` |
-| Database | SQLite (EF Core) | `%PROGRAMDATA%\APEX\apex.db`, auto-created on startup |
+| Database | SQLite (EF Core) | `%PROGRAMDATA%\StarkTrace\starktrace.db`, auto-created on startup |
 | Vector Memory | EF Core + C# cosine similarity | `byte[]` BLOB embeddings, no external vector DB |
 | Cache | `IMemoryCache` | In-process, replaces Redis |
 | Queue | `Channel<T>` | In-process, replaces Redis BLPOP |
@@ -37,7 +37,7 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 ## Project Structure
 
 ```
-C:\Users\Joe\source\repos\APEX\
+C:\Users\Joe\source\repos\StarkTrace\
 ├── src/
 │   ├── StarkTrace.Core/              — Models, Interfaces, Enums
 │   │   └── Models/
@@ -105,20 +105,20 @@ See `main` branch STATUS.md for detailed phase notes. All features ported to SQL
 - `GET /api/packs/activated`, `GET /api/packs/machine-id`
 - `LicenseActivationCache` in SQLite — caches activation so re-imports skip license server
 - Dashboard **Packs page** — enter license key, click Import, done
-- Pack ID resolved from key prefix (e.g. `APEX-WP-...` → `wordpress-divi`)
+- Pack ID resolved from key prefix (e.g. `StarkTrace-WP-...` → `wordpress-divi`)
 
-#### 7d — APEX.Licensing API ✅ (separate repo)
-- Repo: `C:\Users\Joe\source\repos\APEX.Licensing` (to be created from outputs)
+#### 7d — StarkTrace.Licensing API ✅ (separate repo)
+- Repo: `C:\Users\Joe\source\repos\StarkTrace.Licensing` (to be created from outputs)
 - Stack: .NET 8 minimal API + SQLite + Dapper, Docker Compose port 5100
 - Cloudflare Zero Trust tunnel → `apex-licenses.lefevrecorpwv.com`
 - `POST /licenses/activate` — validates key, checks machine limit (2),
   returns `{ decryptionKey, packUrl }`
 - `POST /licenses/deactivate`
 - `POST /webhooks/lemonsqueezy` — HMAC-verified, provisions key on `order_created`
-- `GET /packs/{filename}` — static file serving of encrypted `.apexpack` files
+- `GET /packs/{filename}` — static file serving of encrypted `.starktracepack` files
   from `/packs/` Docker volume
 - `GET /licenses/{key}` — admin only (`X-Admin-Key` header)
-- Outputs: `/mnt/user-data/outputs/APEX.Licensing/`
+- Outputs: `/mnt/user-data/outputs/StarkTrace.Licensing/`
 
 #### 7e — MCP Audit Proxy ✅
 - `StarkTrace.Proxy` — new project, added to solution
@@ -183,15 +183,15 @@ Key differentiator: they protect the org from the user. StarkTrace protects the 
 ### Packs Available (planned)
 | Pack ID | Name | Key Prefix | Price |
 |---------|------|-----------|-------|
-| `wordpress-divi` | WordPress / Divi Pro Pack | `APEX-WP-` | $12 |
-| `dotnet-azure` | .NET / Azure Pro Pack | `APEX-DN-` | $12 |
-| `react-ts` | React / TypeScript Pro Pack | `APEX-RE-` | $12 |
-| `algolia` | Algolia Search Pack | `APEX-AL-` | $9 |
-| `fullstack-bundle` | Full-Stack Bundle (all above) | `APEX-FS-` | $25 |
+| `wordpress-divi` | WordPress / Divi Pro Pack | `StarkTrace-WP-` | $12 |
+| `dotnet-azure` | .NET / Azure Pro Pack | `StarkTrace-DN-` | $12 |
+| `react-ts` | React / TypeScript Pro Pack | `StarkTrace-RE-` | $12 |
+| `algolia` | Algolia Search Pack | `StarkTrace-AL-` | $9 |
+| `fullstack-bundle` | Full-Stack Bundle (all above) | `StarkTrace-FS-` | $25 |
 
 ### Pack workflow
 1. Export real memories from StarkTrace instance (export endpoint not yet built)
-2. Merge with `sample-packs/wordpress-divi.apexpack.json` template
+2. Merge with `sample-packs/wordpress-divi.starktracepack.json` template
 3. `starktrace-pack validate` → `starktrace-pack encrypt --key <DecryptionKey from LicenseKeys table>`
 4. Drop encrypted file into `/packs/` volume on licensing server
 5. Update `PackFileName` in `LicensePacks` table
@@ -231,12 +231,12 @@ Key differentiator: they protect the org from the user. StarkTrace protects the 
 
 | Item | Path |
 |------|------|
-| StarkTrace repo | `C:\Users\Joe\source\repos\APEX` (branch: `feature/no-docker`) |
-| SQLite DB | `%PROGRAMDATA%\APEX\apex.db` (auto-created) |
+| StarkTrace repo | `C:\Users\Joe\source\repos\StarkTrace` (branch: `feature/no-docker`) |
+| SQLite DB | `%PROGRAMDATA%\StarkTrace\starktrace.db` (auto-created) |
 | Claude Desktop config | `%APPDATA%\Claude\claude_desktop_config.json` |
-| APEX.Licensing outputs | `/mnt/user-data/outputs/APEX.Licensing/` |
+| StarkTrace.Licensing outputs | `/mnt/user-data/outputs/StarkTrace.Licensing/` |
 | Pack tools outputs | `/mnt/user-data/outputs/pack-tools/` |
-| Sample WordPress pack | `/mnt/user-data/outputs/pack-tools/sample-packs/wordpress-divi.apexpack.json` |
+| Sample WordPress pack | `/mnt/user-data/outputs/pack-tools/sample-packs/wordpress-divi.starktracepack.json` |
 
 ---
 
@@ -245,7 +245,7 @@ Key differentiator: they protect the org from the user. StarkTrace protects the 
 1. ~~**`starktrace_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
 2. ~~**Pack system (7c)**~~ ✅ DONE — models, PackCrypto (AES-256-CBC), import/export services, PacksController, dashboard Packs page, StarkTrace.PackTool CLI
 3. ~~**Pack export endpoint**~~ ✅ DONE — `GET /api/packs/export/{project}` + `POST /api/packs/import` + validate/keygen/machine-id
-4. ~~**APEX.Licensing deploy**~~ ✅ DONE — separate repo at `C:\Users\Joe\source\repos\APEX.Licensing`, .NET 8 minimal API + SQLite + Dapper + Docker Compose
+4. ~~**StarkTrace.Licensing deploy**~~ ✅ DONE — separate repo at `C:\Users\Joe\source\repos\StarkTrace.Licensing`, .NET 8 minimal API + SQLite + Dapper + Docker Compose
 5. ~~**Proxy Audit dashboard page**~~ ✅ DONE — stats cards, logs table with pagination/filtering, nav link
 6. **GitHub Release** — `git tag v1.0.0 && git push origin v1.0.0` to trigger release workflow
 7. **Pack content** — build real wordpress-divi pack from actual WVU Medicine memories

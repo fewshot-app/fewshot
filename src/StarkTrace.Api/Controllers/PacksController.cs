@@ -29,7 +29,7 @@ public class PacksController : ControllerBase
     }
 
     /// <summary>
-    /// Export and encrypt a project's knowledge as an .apexpack envelope.
+    /// Export and encrypt a project's knowledge as an .starktracepack envelope.
     /// </summary>
     [HttpGet("export/{project}/encrypted")]
     public async Task<ActionResult<EncryptedPackEnvelope>> ExportEncrypted(

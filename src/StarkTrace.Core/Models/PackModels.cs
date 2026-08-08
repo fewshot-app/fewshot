@@ -1,7 +1,7 @@
 namespace StarkTrace.Core.Models;
 
 /// <summary>
-/// Top-level structure of a .apexpack file (JSON before encryption).
+/// Top-level structure of a .starktracepack file (JSON before encryption).
 /// Contains curated memories, preferences, and anti-patterns for a domain.
 /// </summary>
 public class StarkTracePack
@@ -49,7 +49,7 @@ public class PackAntiPattern
 /// </summary>
 public class EncryptedPackEnvelope
 {
-    public string Format { get; set; } = "apexpack-v2";
+    public string Format { get; set; } = "starktracepack-v2";
     public string PackId { get; set; } = string.Empty;
     public string Cipher { get; set; } = "AES-256-GCM";
     public string Iv { get; set; } = string.Empty;

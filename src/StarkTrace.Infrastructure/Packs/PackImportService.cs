@@ -42,7 +42,7 @@ public class PackImportService
     }
 
     /// <summary>
-    /// Import from encrypted .apexpack envelope with a decryption key.
+    /// Import from encrypted .starktracepack envelope with a decryption key.
     /// </summary>
     public async Task<PackImportResult> ImportEncryptedAsync(string envelopeJson, string decryptionKey, string? targetProject = null)
     {

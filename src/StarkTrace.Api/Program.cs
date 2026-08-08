@@ -26,7 +26,7 @@ builder.WebHost.UseStaticWebAssets();
 
 // ── SQLite connection string (expands %PROGRAMDATA% et al.) ──────
 var rawConn = builder.Configuration.GetConnectionString("StarkTraceDb")
-    ?? "Data Source=%PROGRAMDATA%\\APEX\\apex.db";
+    ?? "Data Source=%PROGRAMDATA%\\StarkTrace\\starktrace.db";
 var sqliteConn = rawConn
     .Replace("%APPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData))
     .Replace("%LOCALAPPDATA%", Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))

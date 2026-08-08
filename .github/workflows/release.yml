@@ -74,7 +74,7 @@ jobs:
 
             **One-line installer (PowerShell):**
             ```powershell
-            irm https://raw.githubusercontent.com/jstarkwv/APEX/main/install.ps1 | iex
+            irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/main/install.ps1 | iex
             ```
 
             **Requirements:** [Ollama](https://ollama.com) + .NET 8 (auto-installed if missing)
@@ -86,7 +86,7 @@ jobs:
             - `StarkTrace.Dashboard.zip` — Blazor WASM dashboard (static files)
 
             ## Manual install
-            See [README](https://github.com/jstarkwv/APEX/blob/main/README.md) for manual setup instructions.
+            See [README](https://github.com/jstarkwv/StarkTrace/blob/main/README.md) for manual setup instructions.
           files: |
             publish/StarkTrace.Api-win-x64.zip
             publish/StarkTrace.Mcp-win-x64.zip

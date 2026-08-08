@@ -196,28 +196,28 @@ public class PresidioProcessManager : IHostedService, IAsyncDisposable
 
     private static string ResolveScriptPath()
     {
-        // Probe user profiles for APEX\presidio\serve.py
+        // Probe user profiles for StarkTrace\presidio\serve.py
         var candidates = new List<string>();
 
         // Current account's LocalAppData (works for user-mode runs)
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrEmpty(localAppData))
-            candidates.Add(Path.Combine(localAppData, "APEX", "presidio", "serve.py"));
+            candidates.Add(Path.Combine(localAppData, "StarkTrace", "presidio", "serve.py"));
 
-        // Scan C:\Users\*\AppData\Local\APEX (covers service account not matching installer user)
+        // Scan C:\Users\*\AppData\Local\StarkTrace (covers service account not matching installer user)
         var usersDir = @"C:\Users";
         if (Directory.Exists(usersDir))
         {
             foreach (var userDir in Directory.GetDirectories(usersDir))
             {
-                var candidate = Path.Combine(userDir, "AppData", "Local", "APEX", "presidio", "serve.py");
+                var candidate = Path.Combine(userDir, "AppData", "Local", "StarkTrace", "presidio", "serve.py");
                 if (!candidates.Contains(candidate))
                     candidates.Add(candidate);
             }
         }
 
         // ProgramData fallback
-        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "APEX", "presidio", "serve.py"));
+        candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "StarkTrace", "presidio", "serve.py"));
 
         return candidates.FirstOrDefault(File.Exists) ?? candidates.First();
     }

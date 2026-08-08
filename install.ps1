@@ -6,7 +6,7 @@
     Downloads the latest StarkTrace release, installs Ollama (if needed),
     installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/APEX/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/main/install.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
@@ -14,9 +14,9 @@ $ErrorActionPreference = 'Stop'
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 $RepoOwner    = 'jstarkwv'
-$RepoName     = 'APEX'
-$ServiceName  = 'APEX'
-$InstallDir   = "$env:LOCALAPPDATA\APEX"
+$RepoName     = 'StarkTrace'
+$ServiceName  = 'StarkTrace'
+$InstallDir   = "$env:LOCALAPPDATA\StarkTrace"
 $ApiPort      = 5000
 $OllamaEmbed  = 'nomic-embed-text'
 $OllamaChat   = 'gemma4'
@@ -385,9 +385,9 @@ $apiExe = "$InstallDir\api\StarkTrace.Api.exe"
 if (-not $script:SkipService) {
     Write-Step "Registering Windows Service"
 
-    if (-not [System.Diagnostics.EventLog]::SourceExists('APEX')) {
-        [System.Diagnostics.EventLog]::CreateEventSource('APEX', 'Application')
-        Write-Ok "Registered 'APEX' Event Log source"
+    if (-not [System.Diagnostics.EventLog]::SourceExists('StarkTrace')) {
+        [System.Diagnostics.EventLog]::CreateEventSource('StarkTrace', 'Application')
+        Write-Ok "Registered 'StarkTrace' Event Log source"
     }
 
     # Service was already stopped earlier; just delete if it exists
