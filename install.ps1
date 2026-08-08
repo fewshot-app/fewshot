@@ -1,22 +1,22 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    StarkTrace installer -- AI Session Audit & Memory
+    Fewshot installer -- Context packs & memory for AI agents
 .DESCRIPTION
-    Downloads the latest StarkTrace release, installs Ollama (if needed),
+    Downloads the latest Fewshot release, installs Ollama (if needed),
     installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/fewshot-app/fewshot/main/install.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-$RepoOwner    = 'jstarkwv'
-$RepoName     = 'StarkTrace'
-$ServiceName  = 'StarkTrace'
-$InstallDir   = "$env:LOCALAPPDATA\StarkTrace"
+$RepoOwner    = 'fewshot-app'
+$RepoName     = 'fewshot'
+$ServiceName  = 'Fewshot'
+$InstallDir   = "$env:LOCALAPPDATA\Fewshot"
 $ApiPort      = 5000
 $OllamaEmbed  = 'nomic-embed-text'
 $OllamaChat   = 'gemma4'
@@ -26,7 +26,7 @@ $OllamaChat   = 'gemma4'
 function Write-PresidioScript {
     param([string]$OutPath)
     $py = @'
-"""Presidio HTTP server for StarkTrace -- listens on port 3000."""
+"""Presidio HTTP server for Fewshot -- listens on port 3000."""
 import json, sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from presidio_analyzer import AnalyzerEngine
@@ -109,7 +109,7 @@ function Get-LatestReleaseAsset {
     param([string]$AssetPattern)
     $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
     try {
-        $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ 'User-Agent' = 'StarkTrace-Installer' }
+        $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ 'User-Agent' = 'Fewshot-Installer' }
         $asset = $release.assets | Where-Object { $_.name -like $AssetPattern } | Select-Object -First 1
         if (-not $asset) { Write-Fail "No release asset matching '$AssetPattern' found. Have you created a GitHub Release?" }
         return $asset
@@ -129,7 +129,7 @@ function Invoke-OllamaPull {
 # ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
-Write-Host "  |   StarkTrace -- AI Session Audit & Memory |" -ForegroundColor DarkCyan
+Write-Host "  |   Fewshot -- Context packs & memory for AI agents |" -ForegroundColor DarkCyan
 Write-Host "  |           Installer v1.4                    |" -ForegroundColor DarkCyan
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
 Write-Host ""
@@ -249,9 +249,6 @@ if (-not $pythonExe) { $pythonExe = Get-Command python3 -ErrorAction SilentlyCon
 $installDashboard = Read-Host "      Install Dashboard -- web UI for memories/sessions? [Y/n]"
 $installDashboard = $installDashboard -ne 'n' -and $installDashboard -ne 'N'
 
-$installProxy = Read-Host "      Install Proxy -- MCP audit proxy for PII scanning? [Y/n]"
-$installProxy = $installProxy -ne 'n' -and $installProxy -ne 'N'
-
 if ($pythonExe) {
     $installPresidio = Read-Host "      Install Presidio -- ML-based PII detection? [Y/n]"
     $installPresidio = $installPresidio -ne 'n' -and $installPresidio -ne 'N'
@@ -262,7 +259,6 @@ if ($pythonExe) {
 Write-Host ""
 $components = @("API", "MCP")
 if ($installDashboard) { $components += "Dashboard" }
-if ($installProxy)     { $components += "Proxy" }
 if ($installPresidio)  { $components += "Presidio" }
 Write-Ok "Components: $($components -join ', ')"
 
@@ -281,10 +277,10 @@ if ($installPresidio) {
                 Write-Warn "Presidio installed but spaCy model download failed -- run: python -m spacy download en_core_web_lg"
             }
         } else {
-            Write-Warn "Presidio install failed -- StarkTrace will use built-in regex PII scanning"
+            Write-Warn "Presidio install failed -- Fewshot will use built-in regex PII scanning"
         }
     } catch {
-        Write-Warn "Presidio install failed: $_ -- StarkTrace will use built-in regex PII scanning"
+        Write-Warn "Presidio install failed: $_ -- Fewshot will use built-in regex PII scanning"
     }
 
     $presidioScript = "$InstallDir\presidio\serve.py"
@@ -295,33 +291,33 @@ if ($installPresidio) {
     Write-Host "      To start: python `"$presidioScript`"" -ForegroundColor Gray
 }
 
-# ── Stop running StarkTrace processes ────────────────────────────────────────────────
-Write-Step "Stopping running StarkTrace processes (if any)"
+# ── Stop running Fewshot processes ────────────────────────────────────────────────
+Write-Step "Stopping running Fewshot processes (if any)"
 
 # Stop Windows Service if running
 $existingSvc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existingSvc -and $existingSvc.Status -ne 'Stopped') {
-    Write-Host "      Stopping StarkTrace service..." -ForegroundColor Gray
+    Write-Host "      Stopping Fewshot service..." -ForegroundColor Gray
     Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
     for ($i = 0; $i -lt 30; $i++) {
         $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         if (-not $svc -or $svc.Status -eq 'Stopped') { break }
         Start-Sleep -Seconds 1
     }
-    Write-Ok "StarkTrace service stopped"
+    Write-Ok "Fewshot service stopped"
 } else {
-    Write-Host "      StarkTrace service not running" -ForegroundColor Gray
+    Write-Host "      Fewshot service not running" -ForegroundColor Gray
 }
 
-# Kill any standalone StarkTrace.Api.exe (non-service runs)
-Get-Process -Name 'StarkTrace.Api' -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "      Killing StarkTrace.Api.exe (PID $($_.Id))..." -ForegroundColor Gray
+# Kill any standalone Fewshot.Api.exe (non-service runs)
+Get-Process -Name 'Fewshot.Api' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing Fewshot.Api.exe (PID $($_.Id))..." -ForegroundColor Gray
     $_ | Stop-Process -Force
 }
 
-# Kill StarkTrace.Mcp.exe (Claude Desktop spawns this)
-Get-Process -Name 'StarkTrace.Mcp' -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "      Killing StarkTrace.Mcp.exe (PID $($_.Id))..." -ForegroundColor Gray
+# Kill Fewshot.Mcp.exe (Claude Desktop spawns this)
+Get-Process -Name 'Fewshot.Mcp' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing Fewshot.Mcp.exe (PID $($_.Id))..." -ForegroundColor Gray
     $_ | Stop-Process -Force
 }
 
@@ -330,24 +326,24 @@ Start-Sleep -Seconds 2
 Write-Ok "Ready to update"
 
 # ── Download release ───────────────────────────────────────────────────────────
-Write-Step "Downloading latest StarkTrace release"
+Write-Step "Downloading latest Fewshot release"
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path "$InstallDir\mcp" | Out-Null
 
 # API
-$apiAsset = Get-LatestReleaseAsset 'StarkTrace.Api-win-x64.zip'
+$apiAsset = Get-LatestReleaseAsset 'Fewshot.Api-win-x64.zip'
 Write-Host "      Downloading $($apiAsset.name) ($([math]::Round($apiAsset.size/1MB, 1)) MB)..." -ForegroundColor Gray
-$apiZip = "$env:TEMP\StarkTrace.Api.zip"
+$apiZip = "$env:TEMP\Fewshot.Api.zip"
 Invoke-WebRequest -Uri $apiAsset.browser_download_url -OutFile $apiZip -UseBasicParsing
 Expand-Archive -Path $apiZip -DestinationPath "$InstallDir\api" -Force
 Remove-Item $apiZip
 Write-Ok "API extracted to $InstallDir\api"
 
 # MCP
-$mcpAsset = Get-LatestReleaseAsset 'StarkTrace.Mcp-win-x64.zip'
+$mcpAsset = Get-LatestReleaseAsset 'Fewshot.Mcp-win-x64.zip'
 Write-Host "      Downloading $($mcpAsset.name) ($([math]::Round($mcpAsset.size/1MB, 1)) MB)..." -ForegroundColor Gray
-$mcpZip = "$env:TEMP\StarkTrace.Mcp.zip"
+$mcpZip = "$env:TEMP\Fewshot.Mcp.zip"
 Invoke-WebRequest -Uri $mcpAsset.browser_download_url -OutFile $mcpZip -UseBasicParsing
 Expand-Archive -Path $mcpZip -DestinationPath "$InstallDir\mcp" -Force
 Remove-Item $mcpZip
@@ -355,10 +351,10 @@ Write-Ok "MCP server extracted to $InstallDir\mcp"
 
 # Dashboard
 if ($installDashboard) {
-    $dashAsset = Get-LatestReleaseAsset 'StarkTrace.Dashboard*.zip'
+    $dashAsset = Get-LatestReleaseAsset 'Fewshot.Dashboard*.zip'
     if ($dashAsset) {
         Write-Host "      Downloading $($dashAsset.name)..." -ForegroundColor Gray
-        $dashZip = "$env:TEMP\StarkTrace.Dashboard.zip"
+        $dashZip = "$env:TEMP\Fewshot.Dashboard.zip"
         Invoke-WebRequest -Uri $dashAsset.browser_download_url -OutFile $dashZip -UseBasicParsing
         Expand-Archive -Path $dashZip -DestinationPath "$InstallDir\dashboard" -Force
         Remove-Item $dashZip
@@ -366,28 +362,15 @@ if ($installDashboard) {
     }
 }
 
-# Proxy
-if ($installProxy) {
-    $proxyAsset = Get-LatestReleaseAsset 'StarkTrace.Proxy-win-x64.zip'
-    if ($proxyAsset) {
-        Write-Host "      Downloading $($proxyAsset.name)..." -ForegroundColor Gray
-        $proxyZip = "$env:TEMP\StarkTrace.Proxy.zip"
-        Invoke-WebRequest -Uri $proxyAsset.browser_download_url -OutFile $proxyZip -UseBasicParsing
-        Expand-Archive -Path $proxyZip -DestinationPath "$InstallDir\proxy" -Force
-        Remove-Item $proxyZip
-        Write-Ok "Proxy extracted to $InstallDir\proxy"
-    }
-}
-
 # ── Windows Service ────────────────────────────────────────────────────────────
-$apiExe = "$InstallDir\api\StarkTrace.Api.exe"
+$apiExe = "$InstallDir\api\Fewshot.Api.exe"
 
 if (-not $script:SkipService) {
     Write-Step "Registering Windows Service"
 
-    if (-not [System.Diagnostics.EventLog]::SourceExists('StarkTrace')) {
-        [System.Diagnostics.EventLog]::CreateEventSource('StarkTrace', 'Application')
-        Write-Ok "Registered 'StarkTrace' Event Log source"
+    if (-not [System.Diagnostics.EventLog]::SourceExists('Fewshot')) {
+        [System.Diagnostics.EventLog]::CreateEventSource('Fewshot', 'Application')
+        Write-Ok "Registered 'Fewshot' Event Log source"
     }
 
     # Service was already stopped earlier; just delete if it exists
@@ -407,9 +390,9 @@ if (-not $script:SkipService) {
     sc.exe create $ServiceName `
         binPath= "`"$apiExe`"" `
         start= auto `
-        DisplayName= "StarkTrace AI Middleware" | Out-Null
+        DisplayName= "Fewshot AI Middleware" | Out-Null
 
-    sc.exe description $ServiceName "StarkTrace local AI middleware -- personalized context for Claude Desktop" | Out-Null
+    sc.exe description $ServiceName "Fewshot local AI middleware -- personalized context for Claude Desktop" | Out-Null
     sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     Start-Service -Name $ServiceName
@@ -423,11 +406,11 @@ if (-not $script:SkipService) {
     }
 } else {
     Write-Step "Skipping service registration (not admin)"
-    Write-Host "      To start StarkTrace manually: $apiExe" -ForegroundColor Gray
+    Write-Host "      To start Fewshot manually: $apiExe" -ForegroundColor Gray
 }
 
 # ── Wait for API ready ─────────────────────────────────────────────────────────
-Write-Step "Waiting for StarkTrace API"
+Write-Step "Waiting for Fewshot API"
 $retries = 15
 $ready = $false
 for ($i = 0; $i -lt $retries; $i++) {
@@ -450,7 +433,7 @@ if ($ready) {
 
     $defaultProjects = @(
         @{ name='general';   displayName='General';          keywords='general, misc, scratch';            facts=$null },
-        @{ name='starktrace';      displayName='StarkTrace';             keywords='starktrace, mcp, middleware, ai, ollama'; facts='Local AI middleware project. Stack: .NET 8, SQLite, Ollama.' },
+        @{ name='fewshot';      displayName='Fewshot';             keywords='fewshot, mcp, middleware, ai, ollama'; facts='Local AI middleware project. Stack: .NET 8, SQLite, Ollama.' },
         @{ name='wordpress'; displayName='WordPress / Divi'; keywords='wordpress, divi, php, wp, plugin';  facts='WVU Medicine WordPress/Divi custom modules plugin.' },
         @{ name='dotnet';    displayName='.NET / C#';        keywords='dotnet, csharp, c#, asp.net, ef';   facts='.NET 8 projects including APIs and background services.' },
         @{ name='react';     displayName='React / JS';       keywords='react, javascript, js, ts, vite';   facts='Frontend React and vanilla JS projects.' },
@@ -479,7 +462,7 @@ if ($ready) {
 Write-Step "Configuring Claude Desktop MCP"
 
 # Normalize path to forward slashes to avoid tab/escape bugs in JSON
-$mcpExe = ("$InstallDir\mcp\StarkTrace.Mcp.exe").Replace('\', '/')
+$mcpExe = ("$InstallDir\mcp\Fewshot.Mcp.exe").Replace('\', '/')
 $claudeConfigDir  = "$env:APPDATA\Claude"
 $claudeConfigFile = "$claudeConfigDir\claude_desktop_config.json"
 
@@ -503,7 +486,7 @@ try {
         if (-not $existing.PSObject.Properties['mcpServers']) {
             $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([pscustomobject]@{})
         }
-        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name starktrace -Value ([pscustomobject]@{
+        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name fewshot -Value ([pscustomobject]@{
             command = $mcpExe
             args    = @()
         }) -Force
@@ -511,11 +494,11 @@ try {
         $newJson = $existing | ConvertTo-Json -Depth 10
         # Write WITHOUT BOM -- critical for Claude Desktop compatibility
         [System.IO.File]::WriteAllText($claudeConfigFile, $newJson.Trim(), [System.Text.UTF8Encoding]::new($false))
-        Write-Ok "Merged starktrace MCP entry into existing claude_desktop_config.json"
+        Write-Ok "Merged fewshot MCP entry into existing claude_desktop_config.json"
     } else {
         $config = @{
             mcpServers = @{
-                starktrace = @{
+                fewshot = @{
                     command = $mcpExe
                     args    = @()
                 }
@@ -540,13 +523,13 @@ if ($currentPath -notlike "*$InstallDir\api*") {
     [System.Environment]::SetEnvironmentVariable('PATH', "$currentPath;$InstallDir\api", 'User')
     Write-Ok "Added $InstallDir\api to user PATH"
 } else {
-    Write-Ok "PATH already contains StarkTrace api directory"
+    Write-Ok "PATH already contains Fewshot api directory"
 }
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ==============================================" -ForegroundColor DarkCyan
-Write-Host "   StarkTrace installation complete!" -ForegroundColor Green
+Write-Host "   Fewshot installation complete!" -ForegroundColor Green
 Write-Host "  ==============================================" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "   API:        http://localhost:$ApiPort" -ForegroundColor White
@@ -562,10 +545,10 @@ Write-Host ""
 Write-Host "   Next steps:" -ForegroundColor Yellow
 Write-Host "   1. Restart Claude Desktop to activate the MCP tools" -ForegroundColor White
 Write-Host "   2. In Claude, start a session with:" -ForegroundColor White
-Write-Host "      'Call starktrace_get_context with hint <what you are working on>'" -ForegroundColor Gray
+Write-Host "      'Call fewshot_get_context with hint <what you are working on>'" -ForegroundColor Gray
 Write-Host ""
 if ($script:SkipService) {
-    Write-Host "   To run StarkTrace as a service, re-run this script as Administrator." -ForegroundColor Yellow
+    Write-Host "   To run Fewshot as a service, re-run this script as Administrator." -ForegroundColor Yellow
     Write-Host ""
 }
 Write-Host "   To uninstall: irm https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/uninstall.ps1 | iex" -ForegroundColor Gray
