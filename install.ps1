@@ -1,9 +1,9 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    APEX installer -- Adaptive Personalized EXperience
+    StarkTrace installer -- Adaptive Personalized EXperience
 .DESCRIPTION
-    Downloads the latest APEX release, installs Ollama (if needed),
+    Downloads the latest StarkTrace release, installs Ollama (if needed),
     installs as a Windows Service, pulls models, and configures Claude Desktop MCP.
 .EXAMPLE
     irm https://raw.githubusercontent.com/jstarkwv/APEX/main/install.ps1 | iex
@@ -26,7 +26,7 @@ $OllamaChat   = 'gemma4'
 function Write-PresidioScript {
     param([string]$OutPath)
     $py = @'
-"""Presidio HTTP server for APEX -- listens on port 3000."""
+"""Presidio HTTP server for StarkTrace -- listens on port 3000."""
 import json, sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from presidio_analyzer import AnalyzerEngine
@@ -109,7 +109,7 @@ function Get-LatestReleaseAsset {
     param([string]$AssetPattern)
     $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
     try {
-        $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ 'User-Agent' = 'APEX-Installer' }
+        $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ 'User-Agent' = 'StarkTrace-Installer' }
         $asset = $release.assets | Where-Object { $_.name -like $AssetPattern } | Select-Object -First 1
         if (-not $asset) { Write-Fail "No release asset matching '$AssetPattern' found. Have you created a GitHub Release?" }
         return $asset
@@ -129,7 +129,7 @@ function Invoke-OllamaPull {
 # ── Banner ─────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
-Write-Host "  |   APEX -- Adaptive Personalized EXperience |" -ForegroundColor DarkCyan
+Write-Host "  |   StarkTrace -- Adaptive Personalized EXperience |" -ForegroundColor DarkCyan
 Write-Host "  |           Installer v1.4                    |" -ForegroundColor DarkCyan
 Write-Host "  +==========================================+" -ForegroundColor DarkCyan
 Write-Host ""
@@ -281,10 +281,10 @@ if ($installPresidio) {
                 Write-Warn "Presidio installed but spaCy model download failed -- run: python -m spacy download en_core_web_lg"
             }
         } else {
-            Write-Warn "Presidio install failed -- APEX will use built-in regex PII scanning"
+            Write-Warn "Presidio install failed -- StarkTrace will use built-in regex PII scanning"
         }
     } catch {
-        Write-Warn "Presidio install failed: $_ -- APEX will use built-in regex PII scanning"
+        Write-Warn "Presidio install failed: $_ -- StarkTrace will use built-in regex PII scanning"
     }
 
     $presidioScript = "$InstallDir\presidio\serve.py"
@@ -295,33 +295,33 @@ if ($installPresidio) {
     Write-Host "      To start: python `"$presidioScript`"" -ForegroundColor Gray
 }
 
-# ── Stop running APEX processes ────────────────────────────────────────────────
-Write-Step "Stopping running APEX processes (if any)"
+# ── Stop running StarkTrace processes ────────────────────────────────────────────────
+Write-Step "Stopping running StarkTrace processes (if any)"
 
 # Stop Windows Service if running
 $existingSvc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existingSvc -and $existingSvc.Status -ne 'Stopped') {
-    Write-Host "      Stopping APEX service..." -ForegroundColor Gray
+    Write-Host "      Stopping StarkTrace service..." -ForegroundColor Gray
     Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
     for ($i = 0; $i -lt 30; $i++) {
         $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
         if (-not $svc -or $svc.Status -eq 'Stopped') { break }
         Start-Sleep -Seconds 1
     }
-    Write-Ok "APEX service stopped"
+    Write-Ok "StarkTrace service stopped"
 } else {
-    Write-Host "      APEX service not running" -ForegroundColor Gray
+    Write-Host "      StarkTrace service not running" -ForegroundColor Gray
 }
 
-# Kill any standalone Apex.Api.exe (non-service runs)
-Get-Process -Name 'Apex.Api' -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "      Killing Apex.Api.exe (PID $($_.Id))..." -ForegroundColor Gray
+# Kill any standalone StarkTrace.Api.exe (non-service runs)
+Get-Process -Name 'StarkTrace.Api' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing StarkTrace.Api.exe (PID $($_.Id))..." -ForegroundColor Gray
     $_ | Stop-Process -Force
 }
 
-# Kill Apex.Mcp.exe (Claude Desktop spawns this)
-Get-Process -Name 'Apex.Mcp' -ErrorAction SilentlyContinue | ForEach-Object {
-    Write-Host "      Killing Apex.Mcp.exe (PID $($_.Id))..." -ForegroundColor Gray
+# Kill StarkTrace.Mcp.exe (Claude Desktop spawns this)
+Get-Process -Name 'StarkTrace.Mcp' -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "      Killing StarkTrace.Mcp.exe (PID $($_.Id))..." -ForegroundColor Gray
     $_ | Stop-Process -Force
 }
 
@@ -330,24 +330,24 @@ Start-Sleep -Seconds 2
 Write-Ok "Ready to update"
 
 # ── Download release ───────────────────────────────────────────────────────────
-Write-Step "Downloading latest APEX release"
+Write-Step "Downloading latest StarkTrace release"
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path "$InstallDir\mcp" | Out-Null
 
 # API
-$apiAsset = Get-LatestReleaseAsset 'Apex.Api-win-x64.zip'
+$apiAsset = Get-LatestReleaseAsset 'StarkTrace.Api-win-x64.zip'
 Write-Host "      Downloading $($apiAsset.name) ($([math]::Round($apiAsset.size/1MB, 1)) MB)..." -ForegroundColor Gray
-$apiZip = "$env:TEMP\Apex.Api.zip"
+$apiZip = "$env:TEMP\StarkTrace.Api.zip"
 Invoke-WebRequest -Uri $apiAsset.browser_download_url -OutFile $apiZip -UseBasicParsing
 Expand-Archive -Path $apiZip -DestinationPath "$InstallDir\api" -Force
 Remove-Item $apiZip
 Write-Ok "API extracted to $InstallDir\api"
 
 # MCP
-$mcpAsset = Get-LatestReleaseAsset 'Apex.Mcp-win-x64.zip'
+$mcpAsset = Get-LatestReleaseAsset 'StarkTrace.Mcp-win-x64.zip'
 Write-Host "      Downloading $($mcpAsset.name) ($([math]::Round($mcpAsset.size/1MB, 1)) MB)..." -ForegroundColor Gray
-$mcpZip = "$env:TEMP\Apex.Mcp.zip"
+$mcpZip = "$env:TEMP\StarkTrace.Mcp.zip"
 Invoke-WebRequest -Uri $mcpAsset.browser_download_url -OutFile $mcpZip -UseBasicParsing
 Expand-Archive -Path $mcpZip -DestinationPath "$InstallDir\mcp" -Force
 Remove-Item $mcpZip
@@ -355,10 +355,10 @@ Write-Ok "MCP server extracted to $InstallDir\mcp"
 
 # Dashboard
 if ($installDashboard) {
-    $dashAsset = Get-LatestReleaseAsset 'Apex.Dashboard*.zip'
+    $dashAsset = Get-LatestReleaseAsset 'StarkTrace.Dashboard*.zip'
     if ($dashAsset) {
         Write-Host "      Downloading $($dashAsset.name)..." -ForegroundColor Gray
-        $dashZip = "$env:TEMP\Apex.Dashboard.zip"
+        $dashZip = "$env:TEMP\StarkTrace.Dashboard.zip"
         Invoke-WebRequest -Uri $dashAsset.browser_download_url -OutFile $dashZip -UseBasicParsing
         Expand-Archive -Path $dashZip -DestinationPath "$InstallDir\dashboard" -Force
         Remove-Item $dashZip
@@ -368,10 +368,10 @@ if ($installDashboard) {
 
 # Proxy
 if ($installProxy) {
-    $proxyAsset = Get-LatestReleaseAsset 'Apex.Proxy-win-x64.zip'
+    $proxyAsset = Get-LatestReleaseAsset 'StarkTrace.Proxy-win-x64.zip'
     if ($proxyAsset) {
         Write-Host "      Downloading $($proxyAsset.name)..." -ForegroundColor Gray
-        $proxyZip = "$env:TEMP\Apex.Proxy.zip"
+        $proxyZip = "$env:TEMP\StarkTrace.Proxy.zip"
         Invoke-WebRequest -Uri $proxyAsset.browser_download_url -OutFile $proxyZip -UseBasicParsing
         Expand-Archive -Path $proxyZip -DestinationPath "$InstallDir\proxy" -Force
         Remove-Item $proxyZip
@@ -380,7 +380,7 @@ if ($installProxy) {
 }
 
 # ── Windows Service ────────────────────────────────────────────────────────────
-$apiExe = "$InstallDir\api\Apex.Api.exe"
+$apiExe = "$InstallDir\api\StarkTrace.Api.exe"
 
 if (-not $script:SkipService) {
     Write-Step "Registering Windows Service"
@@ -407,9 +407,9 @@ if (-not $script:SkipService) {
     sc.exe create $ServiceName `
         binPath= "`"$apiExe`"" `
         start= auto `
-        DisplayName= "APEX AI Middleware" | Out-Null
+        DisplayName= "StarkTrace AI Middleware" | Out-Null
 
-    sc.exe description $ServiceName "APEX local AI middleware -- personalized context for Claude Desktop" | Out-Null
+    sc.exe description $ServiceName "StarkTrace local AI middleware -- personalized context for Claude Desktop" | Out-Null
     sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     Start-Service -Name $ServiceName
@@ -423,11 +423,11 @@ if (-not $script:SkipService) {
     }
 } else {
     Write-Step "Skipping service registration (not admin)"
-    Write-Host "      To start APEX manually: $apiExe" -ForegroundColor Gray
+    Write-Host "      To start StarkTrace manually: $apiExe" -ForegroundColor Gray
 }
 
 # ── Wait for API ready ─────────────────────────────────────────────────────────
-Write-Step "Waiting for APEX API"
+Write-Step "Waiting for StarkTrace API"
 $retries = 15
 $ready = $false
 for ($i = 0; $i -lt $retries; $i++) {
@@ -450,7 +450,7 @@ if ($ready) {
 
     $defaultProjects = @(
         @{ name='general';   displayName='General';          keywords='general, misc, scratch';            facts=$null },
-        @{ name='apex';      displayName='APEX';             keywords='apex, mcp, middleware, ai, ollama'; facts='Local AI middleware project. Stack: .NET 8, SQLite, Ollama.' },
+        @{ name='starktrace';      displayName='StarkTrace';             keywords='starktrace, mcp, middleware, ai, ollama'; facts='Local AI middleware project. Stack: .NET 8, SQLite, Ollama.' },
         @{ name='wordpress'; displayName='WordPress / Divi'; keywords='wordpress, divi, php, wp, plugin';  facts='WVU Medicine WordPress/Divi custom modules plugin.' },
         @{ name='dotnet';    displayName='.NET / C#';        keywords='dotnet, csharp, c#, asp.net, ef';   facts='.NET 8 projects including APIs and background services.' },
         @{ name='react';     displayName='React / JS';       keywords='react, javascript, js, ts, vite';   facts='Frontend React and vanilla JS projects.' },
@@ -479,7 +479,7 @@ if ($ready) {
 Write-Step "Configuring Claude Desktop MCP"
 
 # Normalize path to forward slashes to avoid tab/escape bugs in JSON
-$mcpExe = ("$InstallDir\mcp\Apex.Mcp.exe").Replace('\', '/')
+$mcpExe = ("$InstallDir\mcp\StarkTrace.Mcp.exe").Replace('\', '/')
 $claudeConfigDir  = "$env:APPDATA\Claude"
 $claudeConfigFile = "$claudeConfigDir\claude_desktop_config.json"
 
@@ -503,7 +503,7 @@ try {
         if (-not $existing.PSObject.Properties['mcpServers']) {
             $existing | Add-Member -MemberType NoteProperty -Name mcpServers -Value ([pscustomobject]@{})
         }
-        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name apex -Value ([pscustomobject]@{
+        $existing.mcpServers | Add-Member -MemberType NoteProperty -Name starktrace -Value ([pscustomobject]@{
             command = $mcpExe
             args    = @()
         }) -Force
@@ -511,11 +511,11 @@ try {
         $newJson = $existing | ConvertTo-Json -Depth 10
         # Write WITHOUT BOM -- critical for Claude Desktop compatibility
         [System.IO.File]::WriteAllText($claudeConfigFile, $newJson.Trim(), [System.Text.UTF8Encoding]::new($false))
-        Write-Ok "Merged apex MCP entry into existing claude_desktop_config.json"
+        Write-Ok "Merged starktrace MCP entry into existing claude_desktop_config.json"
     } else {
         $config = @{
             mcpServers = @{
-                apex = @{
+                starktrace = @{
                     command = $mcpExe
                     args    = @()
                 }
@@ -540,13 +540,13 @@ if ($currentPath -notlike "*$InstallDir\api*") {
     [System.Environment]::SetEnvironmentVariable('PATH', "$currentPath;$InstallDir\api", 'User')
     Write-Ok "Added $InstallDir\api to user PATH"
 } else {
-    Write-Ok "PATH already contains APEX api directory"
+    Write-Ok "PATH already contains StarkTrace api directory"
 }
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ==============================================" -ForegroundColor DarkCyan
-Write-Host "   APEX installation complete!" -ForegroundColor Green
+Write-Host "   StarkTrace installation complete!" -ForegroundColor Green
 Write-Host "  ==============================================" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "   API:        http://localhost:$ApiPort" -ForegroundColor White
@@ -562,10 +562,10 @@ Write-Host ""
 Write-Host "   Next steps:" -ForegroundColor Yellow
 Write-Host "   1. Restart Claude Desktop to activate the MCP tools" -ForegroundColor White
 Write-Host "   2. In Claude, start a session with:" -ForegroundColor White
-Write-Host "      'Call apex_get_context with hint <what you are working on>'" -ForegroundColor Gray
+Write-Host "      'Call starktrace_get_context with hint <what you are working on>'" -ForegroundColor Gray
 Write-Host ""
 if ($script:SkipService) {
-    Write-Host "   To run APEX as a service, re-run this script as Administrator." -ForegroundColor Yellow
+    Write-Host "   To run StarkTrace as a service, re-run this script as Administrator." -ForegroundColor Yellow
     Write-Host ""
 }
 Write-Host "   To uninstall: irm https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/uninstall.ps1 | iex" -ForegroundColor Gray

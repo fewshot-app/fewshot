@@ -1,11 +1,11 @@
 ﻿# API changes
 cd C:\Users\starkj\source\repos\jstarkwv\APEX\
 Stop-Service APEX
-dotnet publish src\Apex.Api\Apex.Api.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\APEX\api"
+dotnet publish src\StarkTrace.Api\StarkTrace.Api.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\APEX\api"
 if ($LASTEXITCODE -ne 0) { Write-Host "API publish FAILED - service NOT restarted" -ForegroundColor Red; exit 1 }
 Start-Service APEX
 
 # MCP changes
-dotnet publish src\Apex.Mcp\Apex.Mcp.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\APEX\mcp"
+dotnet publish src\StarkTrace.Mcp\StarkTrace.Mcp.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\APEX\mcp"
 if ($LASTEXITCODE -ne 0) { Write-Host "MCP publish FAILED" -ForegroundColor Red; exit 1 }
 # Then FULLY quit Claude Desktop from the system tray and reopen
