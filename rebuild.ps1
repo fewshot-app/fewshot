@@ -1,5 +1,5 @@
 # API changes
-cd C:\Users\starkj\source\repos\jstarkwv\Fewshot\
+cd C:\Users\starkj\source\repos\fewshot-app\fewshot\
 Stop-Service Fewshot
 dotnet publish src\Fewshot.Api\Fewshot.Api.csproj -c Release -r win-x64 --self-contained -o "C:\Users\starkj\AppData\Local\Fewshot\api"
 if ($LASTEXITCODE -ne 0) { Write-Host "API publish FAILED - service NOT restarted" -ForegroundColor Red; exit 1 }
