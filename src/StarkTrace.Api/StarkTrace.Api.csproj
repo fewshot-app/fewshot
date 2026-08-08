@@ -21,7 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\StarkTrace.Core\StarkTrace.Core.csproj" />
     <ProjectReference Include="..\StarkTrace.Infrastructure\StarkTrace.Infrastructure.csproj" />
-    <ProjectReference Include="..\StarkTrace.Dashboard\StarkTrace.Dashboard.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\StarkTrace.Dashboard\StarkTrace.Dashboard.csproj" ReferenceOutputAssembly="false" UndefineProperties="PublishSingleFile;IncludeNativeLibrariesForSelfExtract;SelfContained;RuntimeIdentifier" />
   </ItemGroup>
 
   <Target Name="CopyDashboardWwwroot" AfterTargets="Build">
