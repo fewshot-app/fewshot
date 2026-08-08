@@ -1,4 +1,4 @@
-# APEX v2.0 — Project Status
+# StarkTrace v2.0 — Project Status
 **Last Updated:** 2026-03-08
 
 ---
@@ -19,7 +19,7 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 | Component | Technology | Notes |
 |-----------|-----------|-------|
 | API | .NET 8 Web API | Windows Service via `sc create` |
-| Database | SQLite (EF Core) | `%PROGRAMDATA%\APEX\apex.db`, auto-created on startup |
+| Database | SQLite (EF Core) | `%PROGRAMDATA%\StarkTrace\starktrace.db`, auto-created on startup |
 | Vector Memory | EF Core + C# cosine similarity | `byte[]` BLOB embeddings, no external vector DB |
 | Cache | `IMemoryCache` | In-process, replaces Redis |
 | Queue | `Channel<T>` | In-process, replaces Redis BLPOP |
@@ -27,9 +27,9 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 | Summarization | Ollama gemma4 | ~9.6GB, nightly consolidation |
 | PII Detection | Regex + Shannon entropy (built-in) | Always on. Presidio optional sidecar (port 3000) |
 | Background Jobs | Hangfire InMemory | No SQL Server dependency |
-| Real-time | SignalR | /hubs/apex |
-| MCP Server | Apex.Mcp (.NET 8 stdio) | Claude Desktop integration |
-| MCP Proxy | Apex.Proxy (.NET 8 stdio) | Wraps any MCP server, scans all tool traffic |
+| Real-time | SignalR | /hubs/starktrace |
+| MCP Server | StarkTrace.Mcp (.NET 8 stdio) | Claude Desktop integration |
+| MCP Proxy | StarkTrace.Proxy (.NET 8 stdio) | Wraps any MCP server, scans all tool traffic |
 | Dashboard | Blazor WASM | Standalone, port 5001 |
 
 ---
@@ -37,32 +37,32 @@ All current work is on **`feature/no-docker`**. This document reflects that bran
 ## Project Structure
 
 ```
-C:\Users\Joe\source\repos\APEX\
+C:\Users\Joe\source\repos\StarkTrace\
 ├── src/
-│   ├── Apex.Core/              — Models, Interfaces, Enums
+│   ├── StarkTrace.Core/              — Models, Interfaces, Enums
 │   │   └── Models/
-│   │       ├── ApexPackModels.cs       — Pack import/export models
+│   │       ├── StarkTracePackModels.cs       — Pack import/export models
 │   │       ├── LicenseActivationCache.cs
 │   │       └── ProxyAuditLog.cs        — Proxy audit findings
-│   ├── Apex.Infrastructure/
+│   ├── StarkTrace.Infrastructure/
 │   │   ├── Audit/              — AuditService (3-stage PII pipeline)
 │   │   ├── Context/            — ContextInjector, formatters, TokenCounter
-│   │   ├── Data/               — ApexDbContext (SQLite), no migrations (EnsureCreated)
+│   │   ├── Data/               — StarkTraceDbContext (SQLite), no migrations (EnsureCreated)
 │   │   ├── Memory/             — EmbeddingService, MemoryService (C# cosine similarity)
 │   │   ├── Packs/              — PackCrypto, LicenseApiClient, PackImportService
 │   │   └── Services/           — All domain services
-│   ├── Apex.Api/               — Web API host
+│   ├── StarkTrace.Api/               — Web API host
 │   │   └── Controllers/        — Sessions, Messages, Context, Memory, Experiments,
 │   │                             Audit, Consolidation, Tasks, Projects,
 │   │                             PacksController, ProxyAuditController
-│   ├── Apex.Dashboard/         — Blazor WASM standalone
+│   ├── StarkTrace.Dashboard/         — Blazor WASM standalone
 │   │   └── Pages/              — Overview, Memories, Preferences, AntiPatterns,
 │   │                             Sessions, Tasks, Projects, Experiments, Audit,
 │   │                             Packs, Settings
-│   ├── Apex.Mcp/               — MCP stdio server (8 tools)
-│   └── Apex.Proxy/             — MCP audit proxy (wraps any MCP server)
+│   ├── StarkTrace.Mcp/               — MCP stdio server (8 tools)
+│   └── StarkTrace.Proxy/             — MCP audit proxy (wraps any MCP server)
 ├── tools/
-│   └── Apex.PackTool/          — CLI: apex-pack new/validate/encrypt/decrypt/keygen/machine-id
+│   └── StarkTrace.PackTool/          — CLI: starktrace-pack new/validate/encrypt/decrypt/keygen/machine-id
 ├── install.ps1                 — One-line installer (Windows Service + Claude Desktop config)
 ├── uninstall.ps1
 ├── README.md                   — Privacy-first positioning
@@ -98,44 +98,44 @@ See `main` branch STATUS.md for detailed phase notes. All features ported to SQL
 - **To cut a release:** `git tag v1.0.0 && git push origin v1.0.0`
 
 #### 7c — Pack System ✅
-- `Apex.PackTool` CLI — `new`, `validate`, `encrypt`, `decrypt`, `keygen`
+- `StarkTrace.PackTool` CLI — `new`, `validate`, `encrypt`, `decrypt`, `keygen`
 - Pack format: AES-256-CBC encrypted JSON envelope with SHA256 integrity hash
 - `PackImportService` — activate license → download pack → decrypt → embed → bulk import
 - `PacksController` — `POST /api/packs/import` (license key only, no file upload)
 - `GET /api/packs/activated`, `GET /api/packs/machine-id`
 - `LicenseActivationCache` in SQLite — caches activation so re-imports skip license server
 - Dashboard **Packs page** — enter license key, click Import, done
-- Pack ID resolved from key prefix (e.g. `APEX-WP-...` → `wordpress-divi`)
+- Pack ID resolved from key prefix (e.g. `StarkTrace-WP-...` → `wordpress-divi`)
 
-#### 7d — APEX.Licensing API ✅ (separate repo)
-- Repo: `C:\Users\Joe\source\repos\APEX.Licensing` (to be created from outputs)
+#### 7d — StarkTrace.Licensing API ✅ (separate repo)
+- Repo: `C:\Users\Joe\source\repos\StarkTrace.Licensing` (to be created from outputs)
 - Stack: .NET 8 minimal API + SQLite + Dapper, Docker Compose port 5100
 - Cloudflare Zero Trust tunnel → `apex-licenses.lefevrecorpwv.com`
 - `POST /licenses/activate` — validates key, checks machine limit (2),
   returns `{ decryptionKey, packUrl }`
 - `POST /licenses/deactivate`
 - `POST /webhooks/lemonsqueezy` — HMAC-verified, provisions key on `order_created`
-- `GET /packs/{filename}` — static file serving of encrypted `.apexpack` files
+- `GET /packs/{filename}` — static file serving of encrypted `.starktracepack` files
   from `/packs/` Docker volume
 - `GET /licenses/{key}` — admin only (`X-Admin-Key` header)
-- Outputs: `/mnt/user-data/outputs/APEX.Licensing/`
+- Outputs: `/mnt/user-data/outputs/StarkTrace.Licensing/`
 
 #### 7e — MCP Audit Proxy ✅
-- `Apex.Proxy` — new project, added to solution
+- `StarkTrace.Proxy` — new project, added to solution
 - Wraps any MCP server as a transparent stdio interceptor
 - Scans every JSON-RPC message in both directions (outbound to tool, inbound from tool)
 - Same 3-stage detection as AuditService: regex patterns + Shannon entropy
 - Blocking findings (ConnectionString, BearerToken, JWT, SSN, PrivateKey, CreditCard)
   redacted before forwarding; all findings logged to `POST /api/proxy-audit/log`
-- `ProxyAuditLog` model + EF config in `ApexDbContext`
+- `ProxyAuditLog` model + EF config in `StarkTraceDbContext`
 - `ProxyAuditController` — `/api/proxy-audit/log`, `/logs`, `/stats`
 - **Does not intercept:** raw conversation text between user and Claude
-  (goes direct to `api.anthropic.com` — outside APEX scope)
+  (goes direct to `api.anthropic.com` — outside StarkTrace scope)
 - Setup: wrap each MCP server entry in `claude_desktop_config.json`
 
 #### 7f — README Rewrite ✅
 - Privacy-first positioning (not feature-first)
-- Clear "Privacy scope" section — what APEX protects vs. what it doesn't
+- Clear "Privacy scope" section — what StarkTrace protects vs. what it doesn't
 - Honest about conversation traffic going to Anthropic directly
 - Skills comparison table
 - Proxy scope documented accurately
@@ -144,19 +144,19 @@ See `main` branch STATUS.md for detailed phase notes. All features ported to SQL
 
 ## Privacy Scope (important for marketing/docs)
 
-### What APEX protects
+### What StarkTrace protects
 | Layer | What's protected | How |
 |-------|-----------------|-----|
 | Context injection | Memories/prefs injected into Claude | 3-stage audit pipeline (Regex → Presidio → Entropy) |
-| MCP tool traffic | Arguments sent to tools, results returned | `Apex.Proxy` stdio interceptor |
+| MCP tool traffic | Arguments sent to tools, results returned | `StarkTrace.Proxy` stdio interceptor |
 
-### What APEX does NOT protect
+### What StarkTrace does NOT protect
 - **Direct conversation text** — messages you type and Claude's responses go straight
-  to `api.anthropic.com` over HTTPS. APEX never sees this.
+  to `api.anthropic.com` over HTTPS. StarkTrace never sees this.
 - **Non-MCP integrations** — browser Claude, direct API calls, other AI clients
 
-### Planned: `apex_scan` MCP tool
-- New tool in `Apex.Mcp` that scans content on demand
+### Planned: `starktrace_scan` MCP tool
+- New tool in `StarkTrace.Mcp` that scans content on demand
 - Used with a Claude Desktop system prompt to scan messages before sending
 - Closes the gap for content typed directly into Claude (partial coverage)
 - **Status: not yet built** — estimated 1-2 hours
@@ -172,9 +172,9 @@ See `main` branch STATUS.md for detailed phase notes. All features ported to SQL
 | Portkey | Company from downtime | Cloud models | DevOps/SRE |
 | GeniusRise | Compliance checkbox | Cloud models | Enterprise compliance |
 | Gravitee | Unauthorized access | Cloud models | Enterprise IT |
-| **APEX Proxy** | **User from data exposure** | **Local only** | **Privacy-conscious devs** |
+| **StarkTrace Proxy** | **User from data exposure** | **Local only** | **Privacy-conscious devs** |
 
-Key differentiator: they protect the org from the user. APEX protects the user from the cloud.
+Key differentiator: they protect the org from the user. StarkTrace protects the user from the cloud.
 
 ---
 
@@ -183,16 +183,16 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 ### Packs Available (planned)
 | Pack ID | Name | Key Prefix | Price |
 |---------|------|-----------|-------|
-| `wordpress-divi` | WordPress / Divi Pro Pack | `APEX-WP-` | $12 |
-| `dotnet-azure` | .NET / Azure Pro Pack | `APEX-DN-` | $12 |
-| `react-ts` | React / TypeScript Pro Pack | `APEX-RE-` | $12 |
-| `algolia` | Algolia Search Pack | `APEX-AL-` | $9 |
-| `fullstack-bundle` | Full-Stack Bundle (all above) | `APEX-FS-` | $25 |
+| `wordpress-divi` | WordPress / Divi Pro Pack | `StarkTrace-WP-` | $12 |
+| `dotnet-azure` | .NET / Azure Pro Pack | `StarkTrace-DN-` | $12 |
+| `react-ts` | React / TypeScript Pro Pack | `StarkTrace-RE-` | $12 |
+| `algolia` | Algolia Search Pack | `StarkTrace-AL-` | $9 |
+| `fullstack-bundle` | Full-Stack Bundle (all above) | `StarkTrace-FS-` | $25 |
 
 ### Pack workflow
-1. Export real memories from APEX instance (export endpoint not yet built)
-2. Merge with `sample-packs/wordpress-divi.apexpack.json` template
-3. `apex-pack validate` → `apex-pack encrypt --key <DecryptionKey from LicenseKeys table>`
+1. Export real memories from StarkTrace instance (export endpoint not yet built)
+2. Merge with `sample-packs/wordpress-divi.starktracepack.json` template
+3. `starktrace-pack validate` → `starktrace-pack encrypt --key <DecryptionKey from LicenseKeys table>`
 4. Drop encrypted file into `/packs/` volume on licensing server
 5. Update `PackFileName` in `LicensePacks` table
 6. Create Lemon Squeezy product, add to `ProductPackMap` in `WebhooksController.cs`
@@ -203,14 +203,14 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 
 | Tool | Description |
 |------|-------------|
-| `apex_get_context` | Resolves project, gets/creates session, returns tiered context |
-| `apex_record_message` | Records user/assistant message to active session |
-| `apex_search_memory` | Semantic search via C# cosine similarity |
-| `apex_end_day` | Closes session, triggers Ollama consolidation |
-| `apex_list_projects` | Lists all active projects |
-| `apex_add_project` | Adds new project with keywords |
-| `apex_remove_project` | Removes project by name |
-| `apex_scan` | Scans text for PII/secrets via 3-stage audit pipeline |
+| `starktrace_get_context` | Resolves project, gets/creates session, returns tiered context |
+| `starktrace_record_message` | Records user/assistant message to active session |
+| `starktrace_search_memory` | Semantic search via C# cosine similarity |
+| `starktrace_end_day` | Closes session, triggers Ollama consolidation |
+| `starktrace_list_projects` | Lists all active projects |
+| `starktrace_add_project` | Adds new project with keywords |
+| `starktrace_remove_project` | Removes project by name |
+| `starktrace_scan` | Scans text for PII/secrets via 3-stage audit pipeline |
 
 ---
 
@@ -220,7 +220,7 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 |------|-------------|---------|
 | general | General | general, misc, other |
 | wordpress | WVU Medicine WordPress | wordpress, divi, wvumedicine, algolia, wvu, plugin, modules |
-| apex | APEX Middleware | apex, mcp, ollama, blazor, middleware, context, proxy |
+| starktrace | StarkTrace Middleware | starktrace, mcp, ollama, blazor, middleware, context, proxy |
 | peakhealth | Peak Health | peakhealth, peak, medicare, hangfire, pdf, itext, provider |
 | findadoc | Find a Doc | findadoc, doctors, provider, search, scheduling, dotnet |
 | crunchtime | CrunchTime Gourmet Popcorn | crunchtime, popcorn, trailer, store, inventory |
@@ -231,21 +231,21 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 
 | Item | Path |
 |------|------|
-| APEX repo | `C:\Users\Joe\source\repos\APEX` (branch: `feature/no-docker`) |
-| SQLite DB | `%PROGRAMDATA%\APEX\apex.db` (auto-created) |
+| StarkTrace repo | `C:\Users\Joe\source\repos\StarkTrace` (branch: `feature/no-docker`) |
+| SQLite DB | `%PROGRAMDATA%\StarkTrace\starktrace.db` (auto-created) |
 | Claude Desktop config | `%APPDATA%\Claude\claude_desktop_config.json` |
-| APEX.Licensing outputs | `/mnt/user-data/outputs/APEX.Licensing/` |
+| StarkTrace.Licensing outputs | `/mnt/user-data/outputs/StarkTrace.Licensing/` |
 | Pack tools outputs | `/mnt/user-data/outputs/pack-tools/` |
-| Sample WordPress pack | `/mnt/user-data/outputs/pack-tools/sample-packs/wordpress-divi.apexpack.json` |
+| Sample WordPress pack | `/mnt/user-data/outputs/pack-tools/sample-packs/wordpress-divi.starktracepack.json` |
 
 ---
 
 ## Pending Work (Priority Order)
 
-1. ~~**`apex_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
-2. ~~**Pack system (7c)**~~ ✅ DONE — models, PackCrypto (AES-256-CBC), import/export services, PacksController, dashboard Packs page, Apex.PackTool CLI
+1. ~~**`starktrace_scan` MCP tool**~~ ✅ DONE — scans content via 3-stage audit pipeline (regex, Presidio, entropy)
+2. ~~**Pack system (7c)**~~ ✅ DONE — models, PackCrypto (AES-256-CBC), import/export services, PacksController, dashboard Packs page, StarkTrace.PackTool CLI
 3. ~~**Pack export endpoint**~~ ✅ DONE — `GET /api/packs/export/{project}` + `POST /api/packs/import` + validate/keygen/machine-id
-4. ~~**APEX.Licensing deploy**~~ ✅ DONE — separate repo at `C:\Users\Joe\source\repos\APEX.Licensing`, .NET 8 minimal API + SQLite + Dapper + Docker Compose
+4. ~~**StarkTrace.Licensing deploy**~~ ✅ DONE — separate repo at `C:\Users\Joe\source\repos\StarkTrace.Licensing`, .NET 8 minimal API + SQLite + Dapper + Docker Compose
 5. ~~**Proxy Audit dashboard page**~~ ✅ DONE — stats cards, logs table with pagination/filtering, nav link
 6. **GitHub Release** — `git tag v1.0.0 && git push origin v1.0.0` to trigger release workflow
 7. **Pack content** — build real wordpress-divi pack from actual WVU Medicine memories
@@ -257,12 +257,12 @@ Key differentiator: they protect the org from the user. APEX protects the user f
 ## Recent Commits (this branch)
 
 ```
-68fb650  feat: add Apex.PackTool CLI — new/validate/encrypt/decrypt/keygen/machine-id
+68fb650  feat: add StarkTrace.PackTool CLI — new/validate/encrypt/decrypt/keygen/machine-id
 a8ee93e  feat: add pack system (7c) — models, crypto, import/export services, controller, dashboard page
 4d6c230  feat: add apex_scan MCP tool for PII/secret detection
 0ea7744  docs: update STATUS.md — reflects no-docker branch, proxy, packs, privacy scope
 a9b58d4  docs: rewrite README with privacy-first positioning and accurate proxy scope
-e0265d2  feat: add Apex.Proxy MCP audit proxy + ProxyAuditLog + ProxyAuditController
+e0265d2  feat: add StarkTrace.Proxy MCP audit proxy + ProxyAuditLog + ProxyAuditController
 b5099e7  feat: add install.ps1/uninstall.ps1 + GitHub Actions release workflow
 e010d0b  feat: SQLite migration — remove Docker/SQL Server/Redis dependencies
 ```

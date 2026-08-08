@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StarkTrace.Api/StarkTrace.Api.csproj" />
+    <Project Path="src/StarkTrace.Core/StarkTrace.Core.csproj" />
+    <Project Path="src/StarkTrace.Dashboard/StarkTrace.Dashboard.csproj" />
+    <Project Path="src/StarkTrace.Infrastructure/StarkTrace.Infrastructure.csproj" />
+    <Project Path="src/StarkTrace.Mcp/StarkTrace.Mcp.csproj" />
+    <Project Path="src/StarkTrace.Proxy/StarkTrace.Proxy.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StarkTrace.Tests/StarkTrace.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/StarkTrace.PackTool/StarkTrace.PackTool.csproj" />
+  </Folder>
+</Solution>

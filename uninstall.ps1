@@ -1,17 +1,17 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    APEX uninstaller
+    StarkTrace uninstaller
 .EXAMPLE
-    irm https://raw.githubusercontent.com/jstarkwv/APEX/main/uninstall.ps1 | iex
+    irm https://raw.githubusercontent.com/jstarkwv/StarkTrace/main/uninstall.ps1 | iex
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ServiceName = 'APEX'
-$InstallDir  = "$env:LOCALAPPDATA\APEX"
-$DataDir     = "$env:PROGRAMDATA\APEX"
+$ServiceName = 'StarkTrace'
+$InstallDir  = "$env:LOCALAPPDATA\StarkTrace"
+$DataDir     = "$env:PROGRAMDATA\StarkTrace"
 
 function Write-Step { param($msg) Write-Host "`n  --> $msg" -ForegroundColor Cyan }
 function Write-Ok   { param($msg) Write-Host "      [OK] $msg" -ForegroundColor Green }
@@ -24,10 +24,10 @@ function Test-Admin {
 }
 
 Write-Host ""
-Write-Host "  APEX Uninstaller" -ForegroundColor DarkCyan
+Write-Host "  StarkTrace Uninstaller" -ForegroundColor DarkCyan
 Write-Host ""
 
-$confirm = Read-Host "  This will remove the APEX service, files, and MCP config. Continue? [y/N]"
+$confirm = Read-Host "  This will remove the StarkTrace service, files, and MCP config. Continue? [y/N]"
 if ($confirm -ne 'y' -and $confirm -ne 'Y') {
     Write-Host "  Cancelled." -ForegroundColor Gray
     exit 0
@@ -49,7 +49,7 @@ if (Test-Admin) {
     }
 } else {
     Write-Warn "Not running as Administrator -- cannot remove Windows Service."
-    Write-Warn "Run 'sc delete APEX' as Administrator to remove it manually."
+    Write-Warn "Run 'sc delete StarkTrace' as Administrator to remove it manually."
 }
 
 # ── Remove from PATH ───────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ Write-Step "Cleaning PATH"
 $currentPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
 $newPath = ($currentPath -split ';' | Where-Object { $_ -notlike "*$InstallDir*" }) -join ';'
 [System.Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
-Write-Ok "Removed APEX from user PATH"
+Write-Ok "Removed StarkTrace from user PATH"
 
 # ── Remove MCP entry from Claude Desktop config ────────────────────────────────
 Write-Step "Removing MCP config"
@@ -65,14 +65,14 @@ $claudeConfigFile = "$env:APPDATA\Claude\claude_desktop_config.json"
 if (Test-Path $claudeConfigFile) {
     try {
         $config = Get-Content $claudeConfigFile -Raw | ConvertFrom-Json
-        if ($config.PSObject.Properties['mcpServers'] -and $config.mcpServers.PSObject.Properties['apex']) {
-            $config.mcpServers.PSObject.Properties.Remove('apex')
+        if ($config.PSObject.Properties['mcpServers'] -and $config.mcpServers.PSObject.Properties['starktrace']) {
+            $config.mcpServers.PSObject.Properties.Remove('starktrace')
             $newJson = ($config | ConvertTo-Json -Depth 10).Trim()
             # Write WITHOUT BOM -- must match install.ps1 for Claude Desktop compatibility
             [System.IO.File]::WriteAllText($claudeConfigFile, $newJson, [System.Text.UTF8Encoding]::new($false))
-            Write-Ok "Removed apex entry from claude_desktop_config.json"
+            Write-Ok "Removed starktrace entry from claude_desktop_config.json"
         } else {
-            Write-Ok "No apex MCP entry found -- nothing to remove"
+            Write-Ok "No starktrace MCP entry found -- nothing to remove"
         }
     } catch {
         Write-Warn "Could not update claude_desktop_config.json: $_"
@@ -85,7 +85,7 @@ if (Test-Path $claudeConfigFile) {
 Write-Step "Removing install directory"
 if (Test-Path $InstallDir) {
     if ($keepData) {
-        Write-Host "      Keeping database at $DataDir\apex.db" -ForegroundColor Gray
+        Write-Host "      Keeping database at $DataDir\starktrace.db" -ForegroundColor Gray
         Remove-Item -Recurse -Force "$InstallDir\api"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\mcp"       -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$InstallDir\dashboard" -ErrorAction SilentlyContinue
@@ -106,7 +106,7 @@ if (-not $keepData -and (Test-Path $DataDir)) {
 }
 
 Write-Host ""
-Write-Host "  APEX has been uninstalled." -ForegroundColor Green
+Write-Host "  StarkTrace has been uninstalled." -ForegroundColor Green
 if ($keepData) {
     Write-Host "  Your data is preserved at $DataDir\" -ForegroundColor Gray
 }

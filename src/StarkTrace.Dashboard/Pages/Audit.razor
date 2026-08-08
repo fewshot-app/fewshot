@@ -1,0 +1,41 @@
+@page "/audit"
+@inject NavigationManager Nav
+
+<div class="page-header">
+    <h1 class="page-title">Audit</h1>
+    <p class="page-subtitle">MCP traffic, content scanning, and suppression rules</p>
+</div>
+
+<TabBar Tabs="Tabs" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" />
+
+@if (ActiveTab == "test")
+{
+    <AuditTestContentPanel />
+}
+else if (ActiveTab == "rules")
+{
+    <AuditRulesPanel />
+}
+else
+{
+    <AuditProxyLogPanel />
+}
+
+@code {
+    private const string DefaultTab = "proxy";
+
+    private static readonly TabItem[] Tabs =
+    [
+        new(DefaultTab, "Proxy Log"),
+        new("test", "Test Content"),
+        new("rules", "Rules")
+    ];
+
+    [Parameter, SupplyParameterFromQuery(Name = "tab")]
+    public string? Tab { get; set; }
+
+    private string ActiveTab => Tabs.Any(t => t.Key == Tab) ? Tab! : DefaultTab;
+
+    private void SelectTab(string key) =>
+        Nav.NavigateTo(key == DefaultTab ? "/audit" : $"/audit?tab={key}", replace: true);
+}
