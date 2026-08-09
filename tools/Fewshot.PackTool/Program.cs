@@ -144,12 +144,19 @@ int Ingest(string[] args)
     foreach (var file in files)
     {
         var relPath = Path.GetRelativePath(docsPath, file).Replace('\\', '/');
-        foreach (var section in SplitMarkdownSections(File.ReadAllLines(file)))
+        var lines = File.ReadAllLines(file);
+        if (lines.Length > 2 && lines[0].Trim() == "---")
+        {
+            var end = Array.FindIndex(lines, 1, l => l.Trim() == "---");
+            if (end > 0) lines = lines[(end + 1)..];
+        }
+
+        foreach (var section in SplitMarkdownSections(lines))
         {
             var content = section.Content.Trim();
             if (content.Length < 60) continue;
 
-            foreach (var chunk in ChunkText(content, maxChunk))
+            foreach (var chunk in ChunkText(content, maxChunk).Where(c => c.Length >= 120))
             {
                 var pathTags = relPath.Split('/')[..^1].Select(t => t.ToLowerInvariant());
                 var tags = string.Join(',', pathTags.Append("ingested").Concat((extraTags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)).Distinct());
