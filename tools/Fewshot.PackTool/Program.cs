@@ -17,6 +17,7 @@ try
     return command switch
     {
         "new" => NewPack(args),
+        "ingest" => Ingest(args),
         "validate" => Validate(args),
         "encrypt" => Encrypt(args),
         "decrypt" => Decrypt(args),
@@ -38,6 +39,7 @@ int PrintUsage()
 
     Usage:
       fewshot-pack new <pack-id> <name> <project> [-o output.json]
+      fewshot-pack ingest <docs-path> --id <pack-id> --name <name> --project <project> [-o output.json] [--tags <t1,t2>] [--max-chunk <chars>]
       fewshot-pack validate <file.json>
       fewshot-pack encrypt <file.json> --key <base64-key> [-o output.fewshotpack]
       fewshot-pack decrypt <file.fewshotpack> --key <base64-key> [-o output.json]
@@ -46,6 +48,7 @@ int PrintUsage()
 
     Commands:
       new         Scaffold a blank pack JSON template
+      ingest      Draft pack memories from a folder of markdown docs (review before shipping)
       validate    Check that a pack JSON is structurally valid
       encrypt     Wrap a plaintext pack in AES-256-CBC envelope
       decrypt     Unwrap an encrypted pack back to plaintext
@@ -107,6 +110,147 @@ int NewPack(string[] args)
     File.WriteAllText(outputPath, json);
     Console.WriteLine($"Created pack template: {outputPath}");
     return 0;
+}
+
+int Ingest(string[] args)
+{
+    if (args.Length < 2 || !Directory.Exists(args[1]))
+    {
+        Console.Error.WriteLine("Usage: fewshot-pack ingest <docs-path> --id <pack-id> --name <name> --project <project> [-o output.json] [--tags <t1,t2>] [--max-chunk <chars>]");
+        return 1;
+    }
+
+    var docsPath = Path.GetFullPath(args[1]);
+    var packId = GetArg(args, "--id") ?? throw new ArgumentException("--id is required");
+    var name = GetArg(args, "--name") ?? packId;
+    var project = GetArg(args, "--project") ?? packId;
+    var extraTags = GetArg(args, "--tags");
+    var maxChunk = int.TryParse(GetArg(args, "--max-chunk"), out var mc) ? mc : 2400;
+
+    string[] skipDirs = [".git", "node_modules", "bin", "obj", ".vs", "dist", "vendor"];
+    var files = Directory.EnumerateFiles(docsPath, "*.md", SearchOption.AllDirectories)
+        .Concat(Directory.EnumerateFiles(docsPath, "*.mdx", SearchOption.AllDirectories))
+        .Where(f => !skipDirs.Any(d => f.Split(Path.DirectorySeparatorChar).Contains(d)))
+        .OrderBy(f => f)
+        .ToList();
+
+    if (files.Count == 0)
+    {
+        Console.Error.WriteLine($"No markdown files found under {docsPath}");
+        return 1;
+    }
+
+    var memories = new List<PackMemory>();
+    foreach (var file in files)
+    {
+        var relPath = Path.GetRelativePath(docsPath, file).Replace('\\', '/');
+        foreach (var section in SplitMarkdownSections(File.ReadAllLines(file)))
+        {
+            var content = section.Content.Trim();
+            if (content.Length < 60) continue;
+
+            foreach (var chunk in ChunkText(content, maxChunk))
+            {
+                var pathTags = relPath.Split('/')[..^1].Select(t => t.ToLowerInvariant());
+                var tags = string.Join(',', pathTags.Append("ingested").Concat((extraTags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)).Distinct());
+                memories.Add(new PackMemory
+                {
+                    Summary = string.IsNullOrEmpty(section.Breadcrumb) ? relPath : $"{relPath}: {section.Breadcrumb}",
+                    Solution = chunk,
+                    OutcomeLabel = "draft",
+                    Language = section.Language,
+                    Tags = tags
+                });
+            }
+        }
+    }
+
+    var pack = new FewshotPack
+    {
+        PackId = packId,
+        Name = name,
+        TargetProject = project,
+        Description = $"Drafted from {files.Count} docs under {Path.GetFileName(docsPath)} — review, distill, and add the tacit layer before shipping",
+        Author = Environment.UserName,
+        Version = "0.1.0-draft",
+        CreatedAt = DateTime.UtcNow,
+        Memories = memories
+    };
+
+    var outputPath = GetArg(args, "-o") ?? $"{packId}.fewshotpack.json";
+    File.WriteAllText(outputPath, PackCrypto.SerializePack(pack));
+    Console.WriteLine($"Ingested {files.Count} files -> {memories.Count} draft memories: {outputPath}");
+    Console.WriteLine("Every memory is tagged OutcomeLabel=draft. Review each, rewrite in your own words, delete the noise, then add Preferences and AntiPatterns.");
+    return 0;
+}
+
+static IEnumerable<(string Breadcrumb, string Content, string? Language)> SplitMarkdownSections(string[] lines)
+{
+    var crumbs = new string?[6];
+    var buffer = new List<string>();
+    var langCounts = new Dictionary<string, int>();
+    var inFence = false;
+    string? fenceLang = null;
+
+    string Crumb() => string.Join(" > ", crumbs.Where(c => c != null));
+    string? TopLang() => langCounts.Count > 0 ? langCounts.MaxBy(kv => kv.Value).Key : null;
+
+    var currentCrumb = "";
+    foreach (var line in lines)
+    {
+        if (line.TrimStart().StartsWith("```"))
+        {
+            if (!inFence)
+            {
+                fenceLang = line.TrimStart().TrimStart('`').Trim().ToLowerInvariant();
+                if (fenceLang.Length > 0) langCounts[fenceLang] = langCounts.GetValueOrDefault(fenceLang) + 1;
+            }
+            inFence = !inFence;
+            buffer.Add(line);
+            continue;
+        }
+
+        if (!inFence && line.StartsWith('#'))
+        {
+            if (buffer.Count > 0)
+            {
+                yield return (currentCrumb, string.Join('\n', buffer), TopLang());
+                buffer.Clear();
+                langCounts.Clear();
+            }
+            var level = line.TakeWhile(c => c == '#').Count();
+            if (level <= 6)
+            {
+                crumbs[level - 1] = line.TrimStart('#').Trim();
+                for (var i = level; i < 6; i++) crumbs[i] = null;
+            }
+            currentCrumb = Crumb();
+            continue;
+        }
+
+        buffer.Add(line);
+    }
+
+    if (buffer.Count > 0)
+        yield return (currentCrumb, string.Join('\n', buffer), TopLang());
+}
+
+static IEnumerable<string> ChunkText(string text, int maxChars)
+{
+    if (text.Length <= maxChars) { yield return text; yield break; }
+
+    var paragraphs = text.Split("\n\n");
+    var current = new System.Text.StringBuilder();
+    foreach (var p in paragraphs)
+    {
+        if (current.Length > 0 && current.Length + p.Length + 2 > maxChars)
+        {
+            yield return current.ToString().Trim();
+            current.Clear();
+        }
+        current.AppendLine(p).AppendLine();
+    }
+    if (current.Length > 0) yield return current.ToString().Trim();
 }
 
 int Validate(string[] args)
