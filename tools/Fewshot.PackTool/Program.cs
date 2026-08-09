@@ -18,6 +18,7 @@ try
     {
         "new" => NewPack(args),
         "ingest" => Ingest(args),
+        "distill" => Distill(args),
         "validate" => Validate(args),
         "encrypt" => Encrypt(args),
         "decrypt" => Decrypt(args),
@@ -40,6 +41,7 @@ int PrintUsage()
     Usage:
       fewshot-pack new <pack-id> <name> <project> [-o output.json]
       fewshot-pack ingest <docs-path> --id <pack-id> --name <name> --project <project> [-o output.json] [--tags <t1,t2>] [--max-chunk <chars>]
+      fewshot-pack distill <pack.json> [-o output.json] [--ollama <url>] [--model <m>] [--embed-model <m>] [--threshold 0.80] [--max-cluster-chars 12000]
       fewshot-pack validate <file.json>
       fewshot-pack encrypt <file.json> --key <base64-key> [-o output.fewshotpack]
       fewshot-pack decrypt <file.fewshotpack> --key <base64-key> [-o output.json]
@@ -49,6 +51,7 @@ int PrintUsage()
     Commands:
       new         Scaffold a blank pack JSON template
       ingest      Draft pack memories from a folder of markdown docs (review before shipping)
+      distill     Cluster and rewrite draft memories via Ollama; mines preferences and anti-patterns
       validate    Check that a pack JSON is structurally valid
       encrypt     Wrap a plaintext pack in AES-256-CBC envelope
       decrypt     Unwrap an encrypted pack back to plaintext
@@ -258,6 +261,24 @@ static IEnumerable<string> ChunkText(string text, int maxChars)
         current.AppendLine(p).AppendLine();
     }
     if (current.Length > 0) yield return current.ToString().Trim();
+}
+
+int Distill(string[] args)
+{
+    if (args.Length < 2 || !File.Exists(args[1]))
+    {
+        Console.Error.WriteLine("Usage: fewshot-pack distill <pack.json> [-o output.json] [--ollama http://localhost:11434] [--model gemma4] [--embed-model nomic-embed-text] [--threshold 0.80] [--max-cluster-chars 12000]");
+        return 1;
+    }
+
+    var output = GetArg(args, "-o") ?? Path.ChangeExtension(args[1], null) + ".distilled.json";
+    var ollama = GetArg(args, "--ollama") ?? "http://localhost:11434";
+    var model = GetArg(args, "--model") ?? "gemma4";
+    var embedModel = GetArg(args, "--embed-model") ?? "nomic-embed-text";
+    var threshold = double.TryParse(GetArg(args, "--threshold"), out var t) ? t : 0.80;
+    var maxChars = int.TryParse(GetArg(args, "--max-cluster-chars"), out var mcc) ? mcc : 12000;
+
+    return Fewshot.PackTool.Distiller.RunAsync(args[1], output, ollama, model, embedModel, threshold, maxChars).GetAwaiter().GetResult();
 }
 
 int Validate(string[] args)
