@@ -157,7 +157,7 @@ public static class Distiller
         - Keep code blocks, JSON schemas, CSS selectors, hook names, and exact identifiers VERBATIM.
         - Rewrite all prose concisely in your own words. Drop navigation text, marketing language, and links.
         - Each memory must be self-contained. summary is a topic statement under 120 characters; solution holds the facts.
-        - Guidance shaped "always/prefer/use X" belongs in preferences (category: lowercase snake_case topic, key: short identifier, value: the guidance).
+        - Guidance shaped "always/prefer/use X" belongs in preferences (category: lowercase snake_case topic, key: snake_case name for the specific rule, e.g. "module_registration_order" — never a generic word like "always" or "prefer", value: the guidance).
         - Failure modes, gotchas, and "don't do X" belong in antiPatterns (pattern: what people do wrong, reason: why it fails and what to do instead).
         - Output the FEWEST items that preserve all facts.
 
