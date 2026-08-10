@@ -10,7 +10,6 @@ using Fewshot.Infrastructure.Experiments;
 using Fewshot.Infrastructure.Memory;
 using Fewshot.Infrastructure.Packs;
 using Fewshot.Infrastructure.Services;
-using Fewshot.Api.Services;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,7 +91,7 @@ builder.Services.AddHangfireServer();
 builder.Services.AddSignalR();
 
 // ── Presidio HTTP client (optional sidecar) ───────────────────────
-var presidioUrl = builder.Configuration["Fewshot:Presidio:BaseUrl"] ?? "http://localhost:3000";
+var presidioUrl = builder.Configuration["Fewshot:Presidio:BaseUrl"] ?? "http://127.0.0.1:3000";
 builder.Services.AddHttpClient("Presidio", client =>
 {
     client.BaseAddress = new Uri(presidioUrl);
