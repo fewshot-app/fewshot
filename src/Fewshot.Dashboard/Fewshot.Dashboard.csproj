@@ -14,4 +14,8 @@
     <PackageReference Include="System.Net.Http.Json" Version="8.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Fewshot.Core\Fewshot.Core.csproj" />
+  </ItemGroup>
+
 </Project>

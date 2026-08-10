@@ -106,6 +106,36 @@
         }
     </div>
 
+    <!-- Review Drafts Panel -->
+    <div class="card">
+        <div class="card-title">Review Drafts</div>
+        <p class="text-sm text-muted" style="margin-bottom:1rem">Upload a distilled pack, review every entry, then finalize the approved content into a shippable pack.</p>
+
+        <InputFile OnChange="UploadDraftAsync" accept=".json" />
+
+        @if (_draftError != null)
+        {
+            <div class="alert-error" style="margin-top:0.75rem">@_draftError</div>
+        }
+
+        @if (_drafts is { Count: > 0 })
+        {
+            <div style="margin-top:1rem">
+                @foreach (var d in _drafts)
+                {
+                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-top:1px solid rgba(148,163,184,0.15)">
+                        <div style="flex:1">
+                            <div>@d.Name <span class="text-muted text-sm">@d.Version</span></div>
+                            <div class="text-sm text-muted">@d.Memories memories · @d.Preferences prefs · @d.AntiPatterns anti-patterns · <strong>@d.Pending pending</strong></div>
+                        </div>
+                        <a class="btn btn-primary" href="/review/@d.Id">Review</a>
+                        <button class="btn" style="color:#ef4444" @onclick="() => DeleteDraftAsync(d.Id)">✕</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
 </div>
 
 <!-- Machine Info -->
@@ -144,14 +174,38 @@
 
     private string? _machineId;
 
+    private List<PackDraftSummaryDto>? _drafts;
+    private string? _draftError;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             _projects = await Api.GetProjectsAsync();
             _machineId = await Api.GetMachineIdAsync();
+            _drafts = await Api.GetPackDraftsAsync();
         }
         catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task UploadDraftAsync(InputFileChangeEventArgs e)
+    {
+        _draftError = null;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(maxAllowedSize: 64 * 1024 * 1024));
+            var json = await reader.ReadToEndAsync();
+            var id = await Api.UploadPackDraftAsync(json);
+            if (id is null) { _draftError = "Upload failed — is it a valid pack JSON?"; return; }
+            _drafts = await Api.GetPackDraftsAsync();
+        }
+        catch (Exception ex) { _draftError = ex.Message; }
+    }
+
+    private async Task DeleteDraftAsync(string id)
+    {
+        await Api.DeletePackDraftAsync(id);
+        _drafts = await Api.GetPackDraftsAsync();
     }
 
     private async Task ExportAsync()

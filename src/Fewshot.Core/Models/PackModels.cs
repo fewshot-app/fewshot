@@ -20,6 +20,7 @@ public class FewshotPack
 
 public class PackMemory
 {
+    public string? ReviewStatus { get; set; }
     public string Summary { get; set; } = string.Empty;
     public string? Solution { get; set; }
     public string? Approach { get; set; }
@@ -30,6 +31,7 @@ public class PackMemory
 
 public class PackPreference
 {
+    public string? ReviewStatus { get; set; }
     public string Category { get; set; } = string.Empty;
     public string Key { get; set; } = string.Empty;
     public string Value { get; set; } = string.Empty;
@@ -38,6 +40,7 @@ public class PackPreference
 
 public class PackAntiPattern
 {
+    public string? ReviewStatus { get; set; }
     public string Pattern { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
     public string? Language { get; set; }

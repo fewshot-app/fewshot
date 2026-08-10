@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Fewshot.Core.Models;
 
 namespace Fewshot.Dashboard.Services;
 
@@ -88,6 +89,33 @@ public class FewshotApiClient
 
     public async Task DeleteProjectAsync(int id) =>
         await _http.DeleteAsync($"/api/projects/{id}");
+
+    // Pack drafts (review workflow)
+    public async Task<List<PackDraftSummaryDto>?> GetPackDraftsAsync() =>
+        await _http.GetFromJsonAsync<List<PackDraftSummaryDto>>("/api/pack-drafts");
+
+    public async Task<string?> UploadPackDraftAsync(string packJson)
+    {
+        var resp = await _http.PostAsync("/api/pack-drafts", new StringContent(packJson, System.Text.Encoding.UTF8, "application/json"));
+        if (!resp.IsSuccessStatusCode) return null;
+        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+        return body?.GetValueOrDefault("id");
+    }
+
+    public async Task<FewshotPack?> GetPackDraftAsync(string id) =>
+        await _http.GetFromJsonAsync<FewshotPack>($"/api/pack-drafts/{id}");
+
+    public async Task SavePackDraftAsync(string id, FewshotPack pack) =>
+        await _http.PutAsJsonAsync($"/api/pack-drafts/{id}", pack);
+
+    public async Task DeletePackDraftAsync(string id) =>
+        await _http.DeleteAsync($"/api/pack-drafts/{id}");
+
+    public async Task<string?> FinalizePackDraftAsync(string id)
+    {
+        var resp = await _http.PostAsync($"/api/pack-drafts/{id}/finalize", null);
+        return resp.IsSuccessStatusCode ? await resp.Content.ReadAsStringAsync() : null;
+    }
 
     // Packs
     public async Task<PackExportDto?> ExportPackAsync(string project) =>
@@ -213,6 +241,19 @@ public record ProjectDto(
 public record ProjectUpsertDto(string Name, string DisplayName, string Keywords, string? Facts, bool IsActive = true);
 
 // Pack DTOs
+public class PackDraftSummaryDto
+{
+    public string Id { get; set; } = "";
+    public string PackId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Version { get; set; } = "";
+    public int Memories { get; set; }
+    public int Preferences { get; set; }
+    public int AntiPatterns { get; set; }
+    public int Pending { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
 public class PackExportDto
 {
     public string PackId { get; set; } = "";
