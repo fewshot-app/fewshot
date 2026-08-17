@@ -20,6 +20,18 @@ public class FewshotApiClient
     public async Task<SessionDto?> GetSessionAsync(int id) =>
         await _http.GetFromJsonAsync<SessionDto>($"/api/sessions/{id}");
 
+    public async Task<SessionDto?> ReassignSessionProjectAsync(int id, string project)
+    {
+        var resp = await _http.PatchAsJsonAsync($"/api/sessions/{id}", new { project });
+        return resp.IsSuccessStatusCode ? await resp.Content.ReadFromJsonAsync<SessionDto>() : null;
+    }
+
+    public async Task<bool> RerunConsolidationAsync(int id)
+    {
+        var resp = await _http.PostAsync($"/api/consolidation/{id}", null);
+        return resp.IsSuccessStatusCode;
+    }
+
     // Memory
     public async Task<List<MemoryDto>> GetMemoriesBySessionAsync(int sessionId) =>
         await _http.GetFromJsonAsync<List<MemoryDto>>($"/api/memory/session/{sessionId}") ?? [];

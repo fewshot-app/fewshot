@@ -18,6 +18,9 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
+// Local tool: don't let graceful shutdown (in-flight Hangfire jobs) hold the SCM
+// stop past its patience — 5s, then the host tears down.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(5));
 
 // Serve Blazor Dashboard static web assets from build output even in Production
 // (auto-enabled only in Development; no-op for published layouts with a real wwwroot)

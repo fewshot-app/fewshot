@@ -24,6 +24,16 @@ body {
     line-height: 1.6;
 }
 
+/* Anchors get the UA default blue (rgb(0,0,238)) unless styled — unreadable on dark */
+a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--accent);
+}
+
 /* Layout */
 .layout { display: flex; min-height: 100vh; }
 

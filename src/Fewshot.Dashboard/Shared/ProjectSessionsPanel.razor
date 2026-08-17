@@ -25,10 +25,11 @@ else
                     <th>Duration</th>
                     <th>Status</th>
                     <th>Summary</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var s in Filtered.OrderByDescending(s => s.StartTime))
+                @foreach (var s in Filtered.OrderByDescending(s => s.StartTime).Take(MaxRows ?? int.MaxValue))
                 {
                     <tr class="@(_highlightedId == s.SessionId ? "row-highlight" : "")">
                         <td>@s.SessionId</td>
@@ -75,6 +76,23 @@ else
                                 <span class="text-danger">@s.ConsolidationError</span>
                             }
                         </td>
+                        <td class="session-actions">
+                            <select class="session-project-select" title="Reassign project"
+                                    value="@(s.Project ?? "")"
+                                    @onchange="e => ReassignAsync(s, e.Value?.ToString())">
+                                @foreach (var name in ProjectOptions(s))
+                                {
+                                    <option value="@name">@name</option>
+                                }
+                            </select>
+                            @if (s.EndTime.HasValue)
+                            {
+                                <button class="btn btn-xs" disabled="@(_busyId == s.SessionId)"
+                                        @onclick="() => RerunAsync(s.SessionId)">
+                                    @(_busyId == s.SessionId ? "…" : "Re-run")
+                                </button>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -83,6 +101,24 @@ else
 }
 
 <style>
+    .session-actions {
+        white-space: nowrap;
+        text-align: right;
+    }
+    .session-project-select {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 0.25rem;
+        color: var(--text-primary);
+        font-size: 0.75rem;
+        padding: 0.15rem 0.3rem;
+        margin-right: 0.4rem;
+        max-width: 9rem;
+    }
+    .btn-xs {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+    }
     .row-highlight {
         animation: highlight-fade 2s ease-out;
     }
@@ -94,10 +130,13 @@ else
 
 @code {
     [Parameter] public string? Project { get; set; }
+    [Parameter] public int? MaxRows { get; set; }
 
     private List<SessionDto> _sessions = [];
+    private List<ProjectDto> _projects = [];
     private bool _loading = true;
     private int? _highlightedId;
+    private int? _busyId;
 
     private IEnumerable<SessionDto> Filtered =>
         Project is null ? _sessions : _sessions.Where(s => string.Equals(s.Project, Project, StringComparison.OrdinalIgnoreCase));
@@ -105,6 +144,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _sessions = await Api.GetSessionsAsync();
+        _projects = await Api.GetProjectsAsync();
         _loading = false;
         SignalR.OnSessionUpdate += HandleSessionUpdate;
         SignalR.OnStateChanged += HandleStateChanged;
@@ -134,6 +174,46 @@ else
     }
 
     private void HandleStateChanged() => InvokeAsync(StateHasChanged);
+
+    private IEnumerable<string> ProjectOptions(SessionDto s)
+    {
+        var names = _projects.Select(p => p.Name).ToList();
+        // Keep the current value selectable even if it isn't a registered project (e.g. "general")
+        if (!string.IsNullOrEmpty(s.Project) && !names.Contains(s.Project, StringComparer.OrdinalIgnoreCase))
+            names.Insert(0, s.Project);
+        return names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task ReassignAsync(SessionDto s, string? project)
+    {
+        if (string.IsNullOrWhiteSpace(project) ||
+            string.Equals(project, s.Project, StringComparison.OrdinalIgnoreCase)) return;
+
+        var updated = await Api.ReassignSessionProjectAsync(s.SessionId, project);
+        if (updated != null)
+        {
+            var idx = _sessions.FindIndex(x => x.SessionId == s.SessionId);
+            if (idx >= 0) _sessions[idx] = updated;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RerunAsync(int sessionId)
+    {
+        _busyId = sessionId;
+        StateHasChanged();
+
+        if (await Api.RerunConsolidationAsync(sessionId))
+        {
+            // Optimistically show Pending; SignalR pushes the real result when the job lands
+            var idx = _sessions.FindIndex(x => x.SessionId == sessionId);
+            if (idx >= 0)
+                _sessions[idx] = _sessions[idx] with { IsConsolidated = false, ConsolidationSummary = null, ConsolidationError = null };
+        }
+
+        _busyId = null;
+        StateHasChanged();
+    }
 
     public void Dispose()
     {

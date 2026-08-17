@@ -38,8 +38,8 @@ public class ConsolidationJob
     private readonly IHubContext<FewshotHub> _hub;
     private readonly ILogger<ConsolidationJob> _logger;
 
-    // Quality gate thresholds
-    private const int MinMessages = 4;
+    // Quality gate threshold: content volume, not message count — one long
+    // recorded summary is exactly the data consolidation exists to capture.
     private const int MinTotalChars = 500;
     private const int MaxCorrections = 3;
 
@@ -231,14 +231,6 @@ public class ConsolidationJob
         var messages = await _messages.GetSessionMessagesAsync(sessionId);
         var totalChars = messages.Sum(m => m.Content.Length);
         var corrections = await _messages.GetCorrectionCountAsync(sessionId);
-
-        if (messages.Count < MinMessages)
-            return new ConsolidationQualityResult
-            {
-                ShouldConsolidate = false,
-                SkipReason = $"Too few messages ({messages.Count}, min {MinMessages})",
-                MessageCount = messages.Count, TotalChars = totalChars, CorrectionCount = corrections
-            };
 
         if (totalChars < MinTotalChars)
             return new ConsolidationQualityResult

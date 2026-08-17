@@ -42,43 +42,8 @@ else
     </div>
 
     <!-- Recent Sessions -->
-    <div class="card">
-        <div class="card-title">Recent Sessions</div>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Started</th>
-                    <th>Status</th>
-                    <th>Summary</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var s in _sessions.OrderByDescending(s => s.StartTime).Take(10))
-                {
-                    <tr>
-                        <td>@s.SessionId</td>
-                        <td class="text-sm text-muted">@s.StartTime.ToString("MMM dd HH:mm")</td>
-                        <td>
-                            @if (s.IsConsolidated)
-                            {
-                                <span class="badge badge-success">Consolidated</span>
-                            }
-                            else if (s.EndTime.HasValue)
-                            {
-                                <span class="badge badge-warning">Pending</span>
-                            }
-                            else
-                            {
-                                <span class="badge badge-info">Active</span>
-                            }
-                        </td>
-                        <td class="text-sm">@(s.ConsolidationSummary?.Split('|').FirstOrDefault()?.Trim() ?? "—")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+    <div class="card-title" style="margin-bottom:0.5rem">Recent Sessions</div>
+    <ProjectSessionsPanel MaxRows="10" />
 
     <!-- Health -->
     <div class="card">
